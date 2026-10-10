@@ -2,64 +2,69 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live AI Camera Studio</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live AI Camera Studio Pro</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#10131c;color:#fff;font-family:Arial,sans-serif;padding:16px}
-h1{text-align:center;font-size:25px}
+body{margin:0;padding:15px;background:#10131c;color:#fff;font-family:Arial,sans-serif}
 .app{max-width:850px;margin:auto}
-.preview{position:relative;background:#000;border-radius:14px;overflow:hidden;min-height:220px}
-video,canvas{display:block;width:100%;height:auto}
-video{transform:scaleX(-1)}
-#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
-button,select{padding:13px;border:0;border-radius:9px;font-size:15px}
-button{background:#6957e8;color:white;font-weight:bold}
-button:active{opacity:.7}
+h1{text-align:center;font-size:25px}
+p{line-height:1.5}
+.panel{background:#1c2230;padding:12px;border-radius:12px;margin:12px 0}
+.preview{position:relative;background:#000;border-radius:12px;overflow:hidden}
+video{width:100%;height:auto;display:block;transform:scaleX(-1)}
+#overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+button,select{width:100%;padding:12px 7px;border:0;border-radius:8px;font-size:14px}
+button{background:#6554e8;color:white;font-weight:bold}
 button:disabled{opacity:.45}
-select{background:#242938;color:#fff;width:100%}
-.status{padding:12px;background:#202635;border-radius:9px;margin-top:12px;overflow-wrap:anywhere}
-label{display:block;margin:12px 0 6px}
+select{background:#303748;color:#fff}
+.status{padding:12px;background:#292f40;border-radius:8px;overflow-wrap:anywhere}
+label{display:block;margin:12px 0 5px}
 input[type=range]{width:100%}
-.full{grid-column:1/-1}
-#photo{width:100%;margin-top:12px;border-radius:10px}
-small{color:#c4c9d6}
+.small{font-size:12px;color:#c3c9d8}
+#photo{width:100%;height:auto;margin-top:12px;border-radius:8px}
+a{color:#9edcff}
 </style>
 </head>
 <body>
 <div class="app">
-<h1>Live AI Camera Studio</h1>
+<h1>Live AI Camera Studio Pro</h1>
+<p class="small">AI face tracking • Live filters • Photo • Video</p>
 
 <div class="preview">
-<video id="video" autoplay playsinline muted></video>
+<video id="video" autoplay muted playsinline></video>
 <canvas id="overlay"></canvas>
 </div>
 
-<div class="status" id="status">Camera is not started.</div>
+<div class="panel">
+<div class="status" id="status">Ready. Press Start Camera.</div>
+</div>
 
-<div class="controls">
+<div class="panel">
+<div class="grid">
 <button id="start">Start Camera</button>
 <button id="switch">Switch Camera</button>
 
-<select id="effect" aria-label="Choose effect">
+<select id="effect" aria-label="Face filter">
 <option value="none">No Effect</option>
-<option value="glasses">Glasses</option>
+<option value="glasses">AI Glasses</option>
 <option value="cat">Cat Ears</option>
 <option value="mustache">Mustache</option>
-<option value="neon">Neon Face Frame</option>
+<option value="neon">Neon Face</option>
+<option value="hearts">Floating Hearts</option>
 </select>
 
-<select id="resolution" aria-label="Camera resolution">
-<option value="480">480p</option>
-<option value="720" selected>720p</option>
-<option value="360">360p</option>
+<select id="resolution" aria-label="Resolution">
+<option value="360">360p - Low Load</option>
+<option value="480">480p - Recommended</option>
+<option value="720">720p - Higher Load</option>
 </select>
 
 <button id="photoBtn">Take Photo</button>
 <button id="recordBtn">Start Recording</button>
-<button id="reset">Reset Settings</button>
 <button id="stop">Stop Camera</button>
+<button id="reset">Reset Settings</button>
 </div>
 
 <label for="brightness">Brightness: <span id="bv">100%</span></label>
@@ -67,318 +72,427 @@ small{color:#c4c9d6}
 
 <label for="contrast">Contrast: <span id="cv">100%</span></label>
 <input id="contrast" type="range" min="50" max="150" value="100">
-
-<p><small>Photo saves as PNG. Video saves as WebM. Video recording does not include audio.</small></p>
-<img id="photo" alt="Captured photo preview" hidden>
-<a id="download" hidden>Download photo</a>
 </div>
 
-<script>
-(function(){
-"use strict";
+<div class="panel">
+<strong>Captured Photo</strong>
+<img id="photo" alt="Captured photo" hidden>
+<p><a id="download" hidden>Download Photo</a></p>
+</div>
 
-const video = document.getElementById("video");
-const overlay = document.getElementById("overlay");
+<p class="small">
+AI model loads from the internet. First startup may take time.
+Video is recorded without audio. Camera access requires HTTPS.
+</p>
+</div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+
+const video = $("video");
+const overlay = $("overlay");
 const ctx = overlay.getContext("2d");
-const status = document.getElementById("status");
-
-const startBtn = document.getElementById("start");
-const switchBtn = document.getElementById("switch");
-const photoBtn = document.getElementById("photoBtn");
-const recordBtn = document.getElementById("recordBtn");
-const resetBtn = document.getElementById("reset");
-const stopBtn = document.getElementById("stop");
-
-const effect = document.getElementById("effect");
-const resolution = document.getElementById("resolution");
-const brightness = document.getElementById("brightness");
-const contrast = document.getElementById("contrast");
-const photo = document.getElementById("photo");
-const download = document.getElementById("download");
+const status = $("status");
 
 let stream = null;
+let faceLandmarker = null;
+let modelPromise = null;
 let facing = "user";
+let running = false;
+let raf = 0;
 let recorder = null;
 let chunks = [];
 let recording = false;
-let frameId = null;
+let lastDetect = 0;
+let landmarks = null;
+let recordCanvas = null;
+let recordCtx = null;
+let recordStream = null;
+let recordRaf = 0;
 
-function say(message){
-  status.textContent = message;
-}
+function say(text){ status.textContent = text; }
 
-function resizeCanvas(){
+function setCanvasSize(){
   const w = video.videoWidth || 640;
   const h = video.videoHeight || 480;
   if(overlay.width !== w) overlay.width = w;
   if(overlay.height !== h) overlay.height = h;
 }
 
-function draw(){
-  if(!video.videoWidth){
-    frameId = requestAnimationFrame(draw);
-    return;
+function point(index){
+  if(!landmarks || !landmarks[index]) return null;
+  const p = landmarks[index];
+  // The preview and saved output are mirrored.
+  return {x:(1-p.x)*overlay.width,y:p.y*overlay.height};
+}
+
+function line(a,b,color="#fff",width=3){
+  if(!a || !b) return;
+  ctx.beginPath();
+  ctx.moveTo(a.x,a.y);
+  ctx.lineTo(b.x,b.y);
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  ctx.stroke();
+}
+
+function drawEffects(){
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  if(!landmarks) return;
+
+  const w=overlay.width;
+  const h=overlay.height;
+  const leftEye=point(33);
+  const leftInner=point(133);
+  const rightInner=point(362);
+  const rightEye=point(263);
+  const nose=point(1);
+  const mouth=point(13);
+  const chin=point(152);
+  const forehead=point(10);
+
+  const eyeL=leftEye && leftInner
+    ? {x:(leftEye.x+leftInner.x)/2,y:(leftEye.y+leftInner.y)/2}
+    : null;
+  const eyeR=rightEye && rightInner
+    ? {x:(rightEye.x+rightInner.x)/2,y:(rightEye.y+rightInner.y)/2}
+    : null;
+
+  const name=$("effect").value;
+  ctx.save();
+  ctx.lineCap="round";
+  ctx.lineJoin="round";
+
+  if(name==="glasses" && eyeL && eyeR){
+    const d=Math.hypot(eyeR.x-eyeL.x,eyeR.y-eyeL.y);
+    const r=d*.28;
+    ctx.strokeStyle="#00eaff";
+    ctx.lineWidth=Math.max(3,w*.006);
+    ctx.shadowColor="#00eaff";
+    ctx.shadowBlur=10;
+    ctx.beginPath();
+    ctx.ellipse(eyeL.x,eyeL.y,r,r*.72,0,0,Math.PI*2);
+    ctx.ellipse(eyeR.x,eyeR.y,r,r*.72,0,0,Math.PI*2);
+    ctx.stroke();
+    line({x:eyeL.x+r*.85,y:eyeL.y},{x:eyeR.x-r*.85,y:eyeR.y},"#00eaff",Math.max(3,w*.006));
+    ctx.shadowBlur=0;
   }
 
-  resizeCanvas();
-  ctx.clearRect(0,0,overlay.width,overlay.height);
-
-  const w = overlay.width;
-  const h = overlay.height;
-  const name = effect.value;
-
-  ctx.save();
-  ctx.translate(w,0);
-  ctx.scale(-1,1);
-  ctx.strokeStyle = "#00f5ff";
-  ctx.fillStyle = "#00f5ff";
-  ctx.lineWidth = Math.max(3,w/180);
-
-  if(name === "glasses"){
-    const y = h * .37;
-    const x1 = w * .35;
-    const x2 = w * .65;
-    const r = w * .075;
-    ctx.strokeStyle = "#00eaff";
+  if(name==="cat" && forehead && eyeL && eyeR){
+    const d=Math.abs(eyeR.x-eyeL.x);
+    const topY=forehead.y-d*.08;
+    ctx.fillStyle="#ff75d8";
+    ctx.strokeStyle="#ffb1e8";
+    ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.arc(x1,y,r,0,Math.PI*2);
-    ctx.arc(x2,y,r,0,Math.PI*2);
-    ctx.moveTo(x1+r,y);
-    ctx.lineTo(x2-r,y);
-    ctx.stroke();
-  } else if(name === "cat"){
-    ctx.fillStyle = "#ff75d8";
-    ctx.beginPath();
-    ctx.moveTo(w*.34,h*.29);
-    ctx.lineTo(w*.28,h*.12);
-    ctx.lineTo(w*.43,h*.25);
+    ctx.moveTo(forehead.x-d*.48,topY+d*.42);
+    ctx.lineTo(forehead.x-d*.45,topY-d*.12);
+    ctx.lineTo(forehead.x-d*.12,topY+d*.30);
     ctx.closePath();
-    ctx.moveTo(w*.57,h*.25);
-    ctx.lineTo(w*.72,h*.12);
-    ctx.lineTo(w*.66,h*.29);
+    ctx.moveTo(forehead.x+d*.48,topY+d*.42);
+    ctx.lineTo(forehead.x+d*.45,topY-d*.12);
+    ctx.lineTo(forehead.x+d*.12,topY+d*.30);
     ctx.closePath();
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(w*.46,h*.42,w*.012,0,Math.PI*2);
-    ctx.arc(w*.54,h*.42,w*.012,0,Math.PI*2);
-    ctx.fill();
-  } else if(name === "mustache"){
-    ctx.fillStyle = "#24202a";
-    ctx.beginPath();
-    ctx.ellipse(w*.46,h*.53,w*.065,h*.025,-.15,0,Math.PI*2);
-    ctx.ellipse(w*.54,h*.53,w*.065,h*.025,.15,0,Math.PI*2);
-    ctx.fill();
-  } else if(name === "neon"){
-    ctx.strokeStyle = "#00ff9d";
-    ctx.shadowColor = "#00ff9d";
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    ctx.ellipse(w*.5,h*.43,w*.19,h*.29,0,0,Math.PI*2);
     ctx.stroke();
+  }
+
+  if(name==="mustache" && nose && mouth){
+    const d=Math.abs((eyeR?.x||w*.6)-(eyeL?.x||w*.4));
+    const y=(nose.y+mouth.y)/2;
+    ctx.fillStyle="#27202a";
+    ctx.beginPath();
+    ctx.ellipse(nose.x-d*.09,y,d*.10,d*.035,-.15,0,Math.PI*2);
+    ctx.ellipse(nose.x+d*.09,y,d*.10,d*.035,.15,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  if(name==="neon" && forehead && chin && eyeL && eyeR){
+    const centerX=(eyeL.x+eyeR.x)/2;
+    const width=Math.abs(eyeR.x-eyeL.x)*1.05;
+    const centerY=(forehead.y+chin.y)/2;
+    const height=Math.abs(chin.y-forehead.y)*.62;
+    ctx.strokeStyle="#00ff9d";
+    ctx.lineWidth=Math.max(3,w*.006);
+    ctx.shadowColor="#00ff9d";
+    ctx.shadowBlur=18;
+    ctx.beginPath();
+    ctx.ellipse(centerX,centerY,width,height,0,0,Math.PI*2);
+    ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+
+  if(name==="hearts" && forehead && chin && eyeL && eyeR){
+    const d=Math.abs(eyeR.x-eyeL.x);
+    ctx.font=`${Math.max(20,d*.22)}px Arial`;
+    ctx.textAlign="center";
+    ctx.fillText("💗",forehead.x-d*.55,forehead.y-d*.20);
+    ctx.fillText("💖",forehead.x+d*.55,forehead.y-d*.25);
   }
 
   ctx.restore();
-  frameId = requestAnimationFrame(draw);
+}
+
+async function loadAI(){
+  if(faceLandmarker) return faceLandmarker;
+  if(modelPromise) return modelPromise;
+
+  modelPromise=(async()=>{
+    say("Loading AI face model... Please wait.");
+    const vision=await import(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
+    );
+    const files=await vision.FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    faceLandmarker=await vision.FaceLandmarker.createFromOptions(files,{
+      baseOptions:{
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate:"CPU"
+      },
+      runningMode:"VIDEO",
+      numFaces:1
+    });
+    return faceLandmarker;
+  })();
+
+  try{
+    return await modelPromise;
+  }catch(error){
+    modelPromise=null;
+    throw error;
+  }
 }
 
 async function startCamera(){
   try{
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      throw new Error("Camera needs HTTPS and a supported browser.");
-    }
-
-    if(stream){
-      stream.getTracks().forEach(track=>track.stop());
-      stream = null;
-    }
-
-    if(frameId){
-      cancelAnimationFrame(frameId);
-      frameId = null;
-    }
+    stopTracksOnly();
+    cancelAnimationFrame(raf);
+    running=false;
+    landmarks=null;
 
     say("Starting camera...");
+    const height=Number($("resolution").value);
 
-    const height = Number(resolution.value);
-    stream = await navigator.mediaDevices.getUserMedia({
+    stream=await navigator.mediaDevices.getUserMedia({
       audio:false,
       video:{
         facingMode:{ideal:facing},
-        width:{ideal:height*4/3},
+        width:{ideal:Math.round(height*4/3)},
         height:{ideal:height}
       }
     });
 
-    video.srcObject = stream;
+    video.srcObject=stream;
     await video.play();
+    setCanvasSize();
+    running=true;
+    raf=requestAnimationFrame(drawLoop);
+    say("Camera running. Loading AI tracking...");
 
-    startBtn.textContent = "Restart Camera";
-    say("Camera is running.");
-    if(!frameId) draw();
+    try{
+      await loadAI();
+      if(running) say("AI face tracking is ready.");
+    }catch(error){
+      say("Camera works, but AI model failed to load. Check internet and reload.");
+      console.error(error);
+    }
   }catch(error){
-    say("Camera error: " + error.message);
+    say("Camera error: "+error.message);
+  }
+}
+
+function stopTracksOnly(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream=null;
   }
 }
 
 function stopCamera(){
-  if(recording && recorder && recorder.state !== "inactive"){
+  running=false;
+  cancelAnimationFrame(raf);
+  if(recording && recorder && recorder.state!=="inactive"){
     recorder.stop();
   }
-
-  if(stream){
-    stream.getTracks().forEach(track=>track.stop());
-    stream = null;
-  }
-
-  if(frameId){
-    cancelAnimationFrame(frameId);
-    frameId = null;
-  }
-
-  video.srcObject = null;
+  stopTracksOnly();
+  video.srcObject=null;
+  landmarks=null;
   ctx.clearRect(0,0,overlay.width,overlay.height);
   say("Camera stopped.");
 }
 
-startBtn.addEventListener("click",startCamera);
+function drawLoop(){
+  if(!running) return;
+  if(video.readyState>=2){
+    setCanvasSize();
+    const now=performance.now();
 
-switchBtn.addEventListener("click",async()=>{
-  facing = facing === "user" ? "environment" : "user";
-  await startCamera();
-});
-
-stopBtn.addEventListener("click",stopCamera);
-
-photoBtn.addEventListener("click",()=>{
-  if(!video.videoWidth){
-    say("Start the camera first.");
-    return;
+    // Limit AI inference frequency to reduce CPU usage.
+    if(faceLandmarker && now-lastDetect>80){
+      lastDetect=now;
+      try{
+        const result=faceLandmarker.detectForVideo(video,now);
+        landmarks=result.faceLandmarks?.[0] || null;
+      }catch(error){
+        console.error(error);
+      }
+    }
+    drawEffects();
   }
+  raf=requestAnimationFrame(drawLoop);
+}
 
-  const out = document.createElement("canvas");
-  out.width = video.videoWidth;
-  out.height = video.videoHeight;
-  const c = out.getContext("2d");
+function makeOutputCanvas(){
+  if(!video.videoWidth) throw new Error("Start the camera first.");
 
-  c.filter = `brightness(${brightness.value}%) contrast(${contrast.value}%)`;
+  const out=document.createElement("canvas");
+  out.width=video.videoWidth;
+  out.height=video.videoHeight;
+  const c=out.getContext("2d");
+
+  c.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
   c.translate(out.width,0);
   c.scale(-1,1);
   c.drawImage(video,0,0,out.width,out.height);
-  c.filter = "none";
-
-  // Add the current effect overlay to the saved photo.
+  c.setTransform(1,0,0,1,0,0);
+  c.filter="none";
   c.drawImage(overlay,0,0,out.width,out.height);
+  return out;
+}
 
-  const url = out.toDataURL("image/png");
-  photo.src = url;
-  photo.hidden = false;
-  download.href = url;
-  download.download = "live-ai-photo.png";
-  download.textContent = "Download Photo";
-  download.hidden = false;
-  say("Photo captured. Tap Download Photo to save it.");
+$("start").addEventListener("click",startCamera);
+
+$("switch").addEventListener("click",async()=>{
+  facing=facing==="user" ? "environment" : "user";
+  await startCamera();
 });
 
-recordBtn.addEventListener("click",()=>{
-  if(recording){
-    if(recorder && recorder.state !== "inactive") recorder.stop();
-    return;
-  }
+$("stop").addEventListener("click",stopCamera);
 
-  if(!video.videoWidth){
-    say("Start the camera first.");
+$("photoBtn").addEventListener("click",()=>{
+  try{
+    const out=makeOutputCanvas();
+    const url=out.toDataURL("image/png");
+    $("photo").src=url;
+    $("photo").hidden=false;
+    const link=$("download");
+    link.href=url;
+    link.download="live-ai-photo.png";
+    link.textContent="Download Photo";
+    link.hidden=false;
+    say("Photo captured successfully.");
+  }catch(error){
+    say(error.message);
+  }
+});
+
+$("recordBtn").addEventListener("click",()=>{
+  if(recording){
+    if(recorder && recorder.state!=="inactive") recorder.stop();
     return;
   }
 
   try{
-    const out = document.createElement("canvas");
-    out.width = video.videoWidth;
-    out.height = video.videoHeight;
-    const c = out.getContext("2d");
+    if(!video.videoWidth || !stream) throw new Error("Start the camera first.");
+    if(!window.MediaRecorder) throw new Error("Video recording is not supported by this browser.");
 
-    function recordFrame(){
-      if(!recording) return;
-      c.filter = `brightness(${brightness.value}%) contrast(${contrast.value}%)`;
-      c.save();
-      c.translate(out.width,0);
-      c.scale(-1,1);
-      c.drawImage(video,0,0,out.width,out.height);
-      c.restore();
-      c.filter = "none";
-      c.drawImage(overlay,0,0,out.width,out.height);
-      requestAnimationFrame(recordFrame);
-    }
+    recordCanvas=document.createElement("canvas");
+    recordCanvas.width=video.videoWidth;
+    recordCanvas.height=video.videoHeight;
+    recordCtx=recordCanvas.getContext("2d");
 
-    recording = true;
-    recordFrame();
-
-    const recordStream = out.captureStream(24);
-    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+    recordStream=recordCanvas.captureStream(20);
+    const mime=MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
       ? "video/webm;codecs=vp8" : "video/webm";
 
-    recorder = new MediaRecorder(recordStream,{mimeType:mime});
-    chunks = [];
+    recorder=new MediaRecorder(recordStream,{mimeType:mime});
+    chunks=[];
 
-    recorder.ondataavailable = e=>{
+    recorder.ondataavailable=e=>{
       if(e.data && e.data.size) chunks.push(e.data);
     };
 
-    recorder.onstop = ()=>{
-      recording = false;
-      recordBtn.textContent = "Start Recording";
+    recorder.onerror=()=>{
+      recording=false;
+      $("recordBtn").textContent="Start Recording";
+      say("Recording error. Try again.");
+    };
+
+    recorder.onstop=()=>{
+      recording=false;
+      $("recordBtn").textContent="Start Recording";
+      if(recordStream) recordStream.getTracks().forEach(t=>t.stop());
 
       if(chunks.length){
-        const blob = new Blob(chunks,{type:"video/webm"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "live-ai-video.webm";
+        const blob=new Blob(chunks,{type:"video/webm"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url;
+        a.download="live-ai-video.webm";
         a.click();
         setTimeout(()=>URL.revokeObjectURL(url),60000);
-        say("Recording saved as a WebM video.");
+        say("Video saved. Check your Downloads folder.");
       }
     };
 
+    function recordFrame(){
+      if(!recording) return;
+      recordCtx.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
+      recordCtx.save();
+      recordCtx.translate(recordCanvas.width,0);
+      recordCtx.scale(-1,1);
+      recordCtx.drawImage(video,0,0,recordCanvas.width,recordCanvas.height);
+      recordCtx.restore();
+      recordCtx.filter="none";
+      recordCtx.drawImage(overlay,0,0,recordCanvas.width,recordCanvas.height);
+      recordRaf=requestAnimationFrame(recordFrame);
+    }
+
+    recording=true;
+    recordFrame();
     recorder.start();
-    recordBtn.textContent = "Stop Recording";
+    $("recordBtn").textContent="Stop Recording";
     say("Recording video...");
   }catch(error){
-    recording = false;
-    say("Recording error: " + error.message);
+    recording=false;
+    say("Recording error: "+error.message);
   }
 });
 
-brightness.addEventListener("input",()=>{
-  document.getElementById("bv").textContent = brightness.value + "%";
-  video.style.filter = `brightness(${brightness.value}%) contrast(${contrast.value}%)`;
+$("brightness").addEventListener("input",()=>{
+  $("bv").textContent=$("brightness").value+"%";
+  video.style.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
 });
 
-contrast.addEventListener("input",()=>{
-  document.getElementById("cv").textContent = contrast.value + "%";
-  video.style.filter = `brightness(${brightness.value}%) contrast(${contrast.value}%)`;
+$("contrast").addEventListener("input",()=>{
+  $("cv").textContent=$("contrast").value+"%";
+  video.style.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
 });
 
-resetBtn.addEventListener("click",()=>{
-  effect.value = "none";
-  resolution.value = "720";
-  brightness.value = "100";
-  contrast.value = "100";
-  document.getElementById("bv").textContent = "100%";
-  document.getElementById("cv").textContent = "100%";
-  video.style.filter = "none";
-  photo.hidden = true;
-  download.hidden = true;
-  say("Settings reset.");
-});
-
-resolution.addEventListener("change",()=>{
+$("resolution").addEventListener("change",()=>{
   if(stream) startCamera();
 });
 
-window.addEventListener("pagehide",()=>{
-  if(stream) stream.getTracks().forEach(track=>track.stop());
+$("reset").addEventListener("click",()=>{
+  $("effect").value="none";
+  $("resolution").value="480";
+  $("brightness").value=100;
+  $("contrast").value=100;
+  $("bv").textContent="100%";
+  $("cv").textContent="100%";
+  video.style.filter="none";
+  $("photo").hidden=true;
+  $("download").hidden=true;
+  say(running ? "Settings reset. Camera is running." : "Settings reset.");
 });
-})();
+
+window.addEventListener("pagehide",()=>{
+  running=false;
+  cancelAnimationFrame(raf);
+  stopTracksOnly();
+});
 </script>
 </body>
 </html>

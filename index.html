@@ -4,15 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Live AI Camera Studio</title>
-
 <style>
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  padding: 18px;
+  padding: 16px;
   background: #0b1020;
-  color: #fff;
+  color: white;
   font-family: Arial, sans-serif;
   text-align: center;
 }
@@ -22,8 +21,8 @@ h1 { color: #60a5fa; }
 .panel {
   max-width: 680px;
   margin: auto;
-  background: #151e32;
   padding: 16px;
+  background: #151e32;
   border-radius: 16px;
 }
 
@@ -33,20 +32,17 @@ h1 { color: #60a5fa; }
   margin: 15px auto;
   overflow: hidden;
   border-radius: 12px;
-  background: #000;
+  background: black;
 }
 
-video {
+video, #overlay {
   display: block;
   width: 100%;
-  height: auto;
-  transform: scaleX(-1);
 }
 
-canvas {
+#overlay {
   position: absolute;
   inset: 0;
-  width: 100%;
   height: 100%;
   pointer-events: none;
 }
@@ -59,11 +55,7 @@ select, button {
   font-size: 15px;
 }
 
-select {
-  max-width: 100%;
-  background: #fff;
-  color: #111827;
-}
+select { max-width: 100%; }
 
 button {
   background: #2563eb;
@@ -71,10 +63,17 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
 #status {
   color: #fbbf24;
   overflow-wrap: anywhere;
 }
+
+#recordStatus { color: #fb7185; }
 
 .small {
   font-size: 13px;
@@ -82,20 +81,19 @@ button {
 }
 </style>
 </head>
-
 <body>
+
 <h1>Live AI Camera Studio</h1>
-<p>Select your live face effect</p>
+<p>Live Effects • Photo • Video Recording</p>
 
 <div class="panel">
-  <label for="effect">Choose Effect:</label>
-  <br>
+  <label for="effect">Choose Face Effect:</label><br>
 
   <select id="effect">
     <option value="glasses">Blue Glasses</option>
     <option value="cat">Cat Ears & Nose</option>
     <option value="moustache">Moustache</option>
-    <option value="neon">Neon Face Outline</option>
+    <option value="neon">Neon Face</option>
     <option value="none">No Effect</option>
   </select>
 
@@ -105,11 +103,18 @@ button {
   </div>
 
   <button id="start">Start Camera & AI</button>
-  <button id="stop">Stop Camera</button>
+  <button id="stop" disabled>Stop Camera</button>
+  <hr>
 
-  <p id="status">Select an effect and start the camera.</p>
+  <button id="photo" disabled>📸 Take Photo</button>
+  <button id="record" disabled>🔴 Start Recording</button>
+  <button id="stopRecord" disabled>Stop Recording</button>
+
+  <p id="status">Start the camera to begin.</p>
+  <p id="recordStatus"></p>
   <p class="small">
-    Camera runs in your browser. Allow camera access when asked.
+    Photos are saved as PNG. Videos are saved as WebM.
+    Allow camera access when asked.
   </p>
 </div>
 
@@ -120,16 +125,29 @@ import {
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 const video = document.getElementById("video");
-const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
 const status = document.getElementById("status");
+const recordStatus = document.getElementById("recordStatus");
 const effectMenu = document.getElementById("effect");
+
+const photoBtn = document.getElementById("photo");
+const recordBtn = document.getElementById("record");
+const stopRecordBtn = document.getElementById("stopRecord");
+const startBtn = document.getElementById("start");
+const stopBtn = document.getElementById("stop");
+
+const output = document.createElement("canvas");
+const outCtx = output.getContext("2d");
 
 let stream = null;
 let landmarker = null;
 let running = false;
 let busy = false;
+let recorder = null;
+let recordedChunks = [];
 let lastTime = -1;
+let recordingStream = null;
 
 function point(p, i, w, h) {
   return {
@@ -138,25 +156,16 @@ function point(p, i, w, h) {
   };
 }
 
-function line(a, b) {
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-}
-
 function drawGlasses(p, w, h) {
   const a = point(p, 33, w, h);
   const b = point(p, 263, w, h);
-
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const d = Math.hypot(dx, dy);
-  const angle = Math.atan2(dy, dx);
 
   ctx.save();
   ctx.translate((a.x + b.x) / 2, (a.y + b.y) / 2);
-  ctx.rotate(angle);
+  ctx.rotate(Math.atan2(dy, dx));
 
   const ew = d * 0.40;
   const eh = d * 0.27;
@@ -168,7 +177,7 @@ function drawGlasses(p, w, h) {
 
   for (const x of [-ew / 2 - gap / 2, ew / 2 + gap / 2]) {
     ctx.beginPath();
-    ctx.roundRect(x - ew / 2, -eh / 2, ew, eh, eh * 0.25);
+    ctx.roundRect(x - ew / 2, -eh / 2, ew, eh, eh * .25);
     ctx.fill();
     ctx.stroke();
   }
@@ -185,79 +194,74 @@ function drawCat(p, w, h) {
   const left = point(p, 234, w, h);
   const right = point(p, 454, w, h);
   const width = Math.hypot(right.x - left.x, right.y - left.y);
-
+  const size = width * .23;
   const cx = top.x;
-  const cy = top.y + width * 0.06;
-  const size = width * 0.23;
+  const cy = top.y + width * .06;
 
   ctx.save();
   ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(2, width * 0.018);
+  ctx.lineWidth = Math.max(2, width * .018);
   ctx.strokeStyle = "#ff78c8";
   ctx.fillStyle = "#f472b6";
 
   for (const side of [-1, 1]) {
-    const x = cx + side * width * 0.24;
-    const y = cy - width * 0.04;
+    const x = cx + side * width * .24;
+    const y = cy - width * .04;
 
     ctx.beginPath();
-    ctx.moveTo(x - size * 0.55, y);
-    ctx.lineTo(x - size * 0.15, y - size);
-    ctx.lineTo(x + size * 0.55, y);
+    ctx.moveTo(x - size * .55, y);
+    ctx.lineTo(x - size * .15, y - size);
+    ctx.lineTo(x + size * .55, y);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = "#ffe4f2";
     ctx.beginPath();
-    ctx.moveTo(x - size * 0.28, y - size * 0.10);
-    ctx.lineTo(x - size * 0.14, y - size * 0.65);
-    ctx.lineTo(x + size * 0.30, y - size * 0.10);
+    ctx.moveTo(x - size * .28, y - size * .10);
+    ctx.lineTo(x - size * .14, y - size * .65);
+    ctx.lineTo(x + size * .30, y - size * .10);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = "#f472b6";
   }
 
   const nose = point(p, 1, w, h);
-  const mw = width * 0.075;
-
+  const mw = width * .075;
   ctx.fillStyle = "#ff6b9d";
   ctx.beginPath();
-  ctx.moveTo(nose.x - mw, nose.y - mw * 0.3);
-  ctx.lineTo(nose.x + mw, nose.y - mw * 0.3);
-  ctx.lineTo(nose.x, nose.y + mw * 0.6);
+  ctx.moveTo(nose.x - mw, nose.y - mw * .3);
+  ctx.lineTo(nose.x + mw, nose.y - mw * .3);
+  ctx.lineTo(nose.x, nose.y + mw * .6);
   ctx.closePath();
   ctx.fill();
-
   ctx.restore();
 }
 
 function drawMoustache(p, w, h) {
   const left = point(p, 61, w, h);
   const right = point(p, 291, w, h);
-  const upperLip = point(p, 13, w, h);
+  const lip = point(p, 13, w, h);
   const width = Math.hypot(right.x - left.x, right.y - left.y);
 
   ctx.save();
   ctx.fillStyle = "#25202a";
 
-  // Two curved moustache lobes under the nose
   for (const side of [-1, 1]) {
     ctx.save();
-    ctx.translate(upperLip.x, upperLip.y + width * 0.015);
+    ctx.translate(lip.x, lip.y + width * .015);
     ctx.scale(side, 1);
-
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.bezierCurveTo(
-      width * 0.16, -width * 0.08,
-      width * 0.30, -width * 0.04,
-      width * 0.47, width * 0.02
+      width * .16, -width * .08,
+      width * .30, -width * .04,
+      width * .47, width * .02
     );
     ctx.bezierCurveTo(
-      width * 0.34, width * 0.20,
-      width * 0.12, width * 0.13,
-      0, width * 0.07
+      width * .34, width * .20,
+      width * .12, width * .13,
+      0, width * .07
     );
     ctx.closePath();
     ctx.fill();
@@ -290,16 +294,39 @@ function drawNeon(p, w, h) {
   ctx.shadowColor = "#00f5ff";
   ctx.shadowBlur = 16;
   ctx.stroke();
-
   ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(0,245,255,0.06)";
+  ctx.fillStyle = "rgba(0,245,255,.06)";
   ctx.fill();
   ctx.restore();
+}
+
+// Composite the mirrored camera and transparent effects.
+// This same canvas is used for both photos and video.
+function renderOutput() {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return;
+
+  if (output.width !== w || output.height !== h) {
+    output.width = w;
+    output.height = h;
+  }
+
+  outCtx.clearRect(0, 0, w, h);
+
+  outCtx.save();
+  outCtx.translate(w, 0);
+  outCtx.scale(-1, 1);
+  outCtx.drawImage(video, 0, 0, w, h);
+  outCtx.restore();
+
+  outCtx.drawImage(overlay, 0, 0, w, h);
 }
 
 async function startCamera() {
   if (running || busy) return;
   busy = true;
+  startBtn.disabled = true;
 
   try {
     status.textContent = "Loading AI model...";
@@ -336,19 +363,17 @@ async function startCamera() {
 
     running = true;
     lastTime = -1;
+    stopBtn.disabled = false;
+    photoBtn.disabled = false;
+    recordBtn.disabled = false;
     status.textContent = "Camera and AI are running.";
     requestAnimationFrame(drawFrame);
 
   } catch (err) {
     status.textContent = "Error: " + err.message;
-
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-    }
-
+    if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
-    video.srcObject = null;
-    running = false;
+    startBtn.disabled = false;
   } finally {
     busy = false;
   }
@@ -363,18 +388,15 @@ function drawFrame() {
     const w = video.videoWidth;
     const h = video.videoHeight;
 
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
+    if (overlay.width !== w || overlay.height !== h) {
+      overlay.width = w;
+      overlay.height = h;
     }
 
     ctx.clearRect(0, 0, w, h);
 
     try {
-      const result = landmarker.detectForVideo(
-        video, performance.now()
-      );
-
+      const result = landmarker.detectForVideo(video, performance.now());
       const face = result.faceLandmarks?.[0];
 
       if (!face) {
@@ -384,20 +406,15 @@ function drawFrame() {
           effectMenu.options[effectMenu.selectedIndex].text;
 
         switch (effectMenu.value) {
-          case "glasses":
-            drawGlasses(face, w, h);
-            break;
-          case "cat":
-            drawCat(face, w, h);
-            break;
-          case "moustache":
-            drawMoustache(face, w, h);
-            break;
-          case "neon":
-            drawNeon(face, w, h);
-            break;
+          case "glasses": drawGlasses(face, w, h); break;
+          case "cat": drawCat(face, w, h); break;
+          case "moustache": drawMoustache(face, w, h); break;
+          case "neon": drawNeon(face, w, h); break;
         }
       }
+
+      renderOutput();
+
     } catch (err) {
       status.textContent = "Tracking error: " + err.message;
     }
@@ -406,19 +423,130 @@ function drawFrame() {
   requestAnimationFrame(drawFrame);
 }
 
-document.getElementById("start").onclick = startCamera;
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
 
-document.getElementById("stop").onclick = () => {
+photoBtn.onclick = () => {
+  if (!running || !output.width) return;
+
+  renderOutput();
+  output.toBlob(blob => {
+    if (!blob) {
+      status.textContent = "Could not create photo.";
+      return;
+    }
+    downloadBlob(blob, "live-ai-photo.png");
+    status.textContent = "Photo downloaded.";
+  }, "image/png");
+};
+
+recordBtn.onclick = () => {
+  if (!running || recorder) return;
+
+  if (!window.MediaRecorder || !output.captureStream) {
+    recordStatus.textContent = "Video recording is not supported by this browser.";
+    return;
+  }
+
+  try {
+    renderOutput();
+    recordedChunks = [];
+    recordingStream = output.captureStream(30);
+
+    let options = {};
+    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+      options.mimeType = "video/webm;codecs=vp8";
+    } else if (MediaRecorder.isTypeSupported("video/webm")) {
+      options.mimeType = "video/webm";
+    }
+
+    recorder = new MediaRecorder(recordingStream, options);
+
+    recorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    recorder.onerror = () => {
+      recordStatus.textContent = "Recording error. Please try again.";
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunks, {
+        type: recorder.mimeType || "video/webm"
+      });
+
+      if (blob.size > 0) {
+        downloadBlob(blob, "live-ai-video.webm");
+        recordStatus.textContent = "Video ready to download.";
+      } else {
+        recordStatus.textContent = "No video data was recorded.";
+      }
+
+      if (recordingStream) {
+        recordingStream.getTracks().forEach(t => t.stop());
+      }
+
+      recordingStream = null;
+      recorder = null;
+      recordBtn.disabled = !running;
+      stopRecordBtn.disabled = true;
+    };
+
+    recorder.start(1000);
+    recordBtn.disabled = true;
+    stopRecordBtn.disabled = false;
+    recordStatus.textContent = "🔴 Recording...";
+
+  } catch (err) {
+    if (recordingStream) {
+      recordingStream.getTracks().forEach(t => t.stop());
+    }
+    recordingStream = null;
+    recorder = null;
+    recordStatus.textContent = "Recording error: " + err.message;
+  }
+};
+
+stopRecordBtn.onclick = () => {
+  if (recorder && recorder.state !== "inactive") {
+    recordStatus.textContent = "Preparing your video...";
+    recorder.stop();
+  }
+};
+
+stopBtn.onclick = () => {
   running = false;
+
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+  }
 
   if (stream) stream.getTracks().forEach(t => t.stop());
 
   stream = null;
   video.srcObject = null;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  outCtx.clearRect(0, 0, output.width, output.height);
+
+  photoBtn.disabled = true;
+  recordBtn.disabled = true;
+  stopBtn.disabled = true;
+  startBtn.disabled = false;
 
   status.textContent = "Camera stopped.";
 };
+
+startBtn.onclick = startCamera;
 </script>
 </body>
 </html>

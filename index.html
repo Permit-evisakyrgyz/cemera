@@ -6,23 +6,22 @@
 <title>Live AI Camera Studio Pro</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:15px;background:#10131c;color:#fff;font-family:Arial,sans-serif}
+body{margin:0;padding:14px;background:#10131c;color:#fff;font-family:Arial,sans-serif}
 .app{max-width:850px;margin:auto}
 h1{text-align:center;font-size:25px}
-p{line-height:1.5}
+.small{font-size:12px;color:#c5cada;line-height:1.5}
 .panel{background:#1c2230;padding:12px;border-radius:12px;margin:12px 0}
 .preview{position:relative;background:#000;border-radius:12px;overflow:hidden}
-video{width:100%;height:auto;display:block;transform:scaleX(-1)}
+video{display:block;width:100%;height:auto;transform:scaleX(-1)}
 #overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 button,select{width:100%;padding:12px 7px;border:0;border-radius:8px;font-size:14px}
-button{background:#6554e8;color:white;font-weight:bold}
-button:disabled{opacity:.45}
-select{background:#303748;color:#fff}
-.status{padding:12px;background:#292f40;border-radius:8px;overflow-wrap:anywhere}
+button{background:#6855e8;color:white;font-weight:bold}
+button:disabled{opacity:.5}
+select{background:#303748;color:white}
+.status{background:#292f40;border-radius:8px;padding:11px;overflow-wrap:anywhere;font-size:14px}
 label{display:block;margin:12px 0 5px}
 input[type=range]{width:100%}
-.small{font-size:12px;color:#c3c9d8}
 #photo{width:100%;height:auto;margin-top:12px;border-radius:8px}
 a{color:#9edcff}
 </style>
@@ -30,7 +29,7 @@ a{color:#9edcff}
 <body>
 <div class="app">
 <h1>Live AI Camera Studio Pro</h1>
-<p class="small">AI face tracking • Live filters • Photo • Video</p>
+<p class="small">AI Face Tracking • AR Filters • Photo • Video</p>
 
 <div class="preview">
 <video id="video" autoplay muted playsinline></video>
@@ -38,7 +37,7 @@ a{color:#9edcff}
 </div>
 
 <div class="panel">
-<div class="status" id="status">Ready. Press Start Camera.</div>
+<div id="status" class="status">Ready. Press Start Camera.</div>
 </div>
 
 <div class="panel">
@@ -46,18 +45,22 @@ a{color:#9edcff}
 <button id="start">Start Camera</button>
 <button id="switch">Switch Camera</button>
 
-<select id="effect" aria-label="Face filter">
+<select id="effect" aria-label="Choose face filter">
 <option value="none">No Effect</option>
 <option value="glasses">AI Glasses</option>
+<option value="sunglasses">Dark Sunglasses</option>
 <option value="cat">Cat Ears</option>
+<option value="bunny">Bunny Ears</option>
 <option value="mustache">Mustache</option>
+<option value="dog">Dog Nose</option>
 <option value="neon">Neon Face</option>
 <option value="hearts">Floating Hearts</option>
+<option value="stars">Star Crown</option>
 </select>
 
-<select id="resolution" aria-label="Resolution">
+<select id="resolution" aria-label="Camera resolution">
 <option value="360">360p - Low Load</option>
-<option value="480">480p - Recommended</option>
+<option value="480" selected>480p - Recommended</option>
 <option value="720">720p - Higher Load</option>
 </select>
 
@@ -81,8 +84,8 @@ a{color:#9edcff}
 </div>
 
 <p class="small">
-AI model loads from the internet. First startup may take time.
-Video is recorded without audio. Camera access requires HTTPS.
+AI model requires internet access. For low-RAM computers, use 360p or 480p.
+Photos save as PNG and videos as WebM. Video recording has no audio.
 </p>
 </div>
 
@@ -95,7 +98,7 @@ const ctx = overlay.getContext("2d");
 const status = $("status");
 
 let stream = null;
-let faceLandmarker = null;
+let landmarker = null;
 let modelPromise = null;
 let facing = "user";
 let running = false;
@@ -103,14 +106,18 @@ let raf = 0;
 let recorder = null;
 let chunks = [];
 let recording = false;
-let lastDetect = 0;
-let landmarks = null;
+let recordStream = null;
 let recordCanvas = null;
 let recordCtx = null;
-let recordStream = null;
 let recordRaf = 0;
+let lastDetect = 0;
+let landmarks = null;
+let smoothLandmarks = null;
+let lastVideoTime = -1;
 
-function say(text){ status.textContent = text; }
+function say(message){
+  status.textContent = message;
+}
 
 function setCanvasSize(){
   const w = video.videoWidth || 640;
@@ -119,14 +126,16 @@ function setCanvasSize(){
   if(overlay.height !== h) overlay.height = h;
 }
 
-function point(index){
+function getPoint(index){
   if(!landmarks || !landmarks[index]) return null;
   const p = landmarks[index];
-  // The preview and saved output are mirrored.
-  return {x:(1-p.x)*overlay.width,y:p.y*overlay.height};
+  return {
+    x:(1-p.x)*overlay.width,
+    y:p.y*overlay.height
+  };
 }
 
-function line(a,b,color="#fff",width=3){
+function drawLine(a,b,color,width){
   if(!a || !b) return;
   ctx.beginPath();
   ctx.moveTo(a.x,a.y);
@@ -142,119 +151,217 @@ function drawEffects(){
 
   const w=overlay.width;
   const h=overlay.height;
-  const leftEye=point(33);
-  const leftInner=point(133);
-  const rightInner=point(362);
-  const rightEye=point(263);
-  const nose=point(1);
-  const mouth=point(13);
-  const chin=point(152);
-  const forehead=point(10);
+  const effect=$("effect").value;
 
-  const eyeL=leftEye && leftInner
-    ? {x:(leftEye.x+leftInner.x)/2,y:(leftEye.y+leftInner.y)/2}
-    : null;
-  const eyeR=rightEye && rightInner
-    ? {x:(rightEye.x+rightInner.x)/2,y:(rightEye.y+rightInner.y)/2}
-    : null;
+  const pLeftOuter=getPoint(33);
+  const pLeftInner=getPoint(133);
+  const pRightInner=getPoint(362);
+  const pRightOuter=getPoint(263);
+  const nose=getPoint(1);
+  const mouth=getPoint(13);
+  const chin=getPoint(152);
+  const forehead=getPoint(10);
+  const lowerLip=getPoint(14);
 
-  const name=$("effect").value;
+  if(!pLeftOuter || !pLeftInner || !pRightInner ||
+     !pRightOuter || !nose || !forehead || !chin) return;
+
+  const eyeL={
+    x:(pLeftOuter.x+pLeftInner.x)/2,
+    y:(pLeftOuter.y+pLeftInner.y)/2
+  };
+  const eyeR={
+    x:(pRightInner.x+pRightOuter.x)/2,
+    y:(pRightInner.y+pRightOuter.y)/2
+  };
+
+  const dx=eyeR.x-eyeL.x;
+  const dy=eyeR.y-eyeL.y;
+  const eyeDistance=Math.hypot(dx,dy);
+  const angle=Math.atan2(dy,dx);
+  const centerX=(eyeL.x+eyeR.x)/2;
+  const centerY=(eyeL.y+eyeR.y)/2;
+  const faceWidth=eyeDistance*2.15;
+
   ctx.save();
   ctx.lineCap="round";
   ctx.lineJoin="round";
 
-  if(name==="glasses" && eyeL && eyeR){
-    const d=Math.hypot(eyeR.x-eyeL.x,eyeR.y-eyeL.y);
-    const r=d*.28;
-    ctx.strokeStyle="#00eaff";
-    ctx.lineWidth=Math.max(3,w*.006);
-    ctx.shadowColor="#00eaff";
-    ctx.shadowBlur=10;
-    ctx.beginPath();
-    ctx.ellipse(eyeL.x,eyeL.y,r,r*.72,0,0,Math.PI*2);
-    ctx.ellipse(eyeR.x,eyeR.y,r,r*.72,0,0,Math.PI*2);
-    ctx.stroke();
-    line({x:eyeL.x+r*.85,y:eyeL.y},{x:eyeR.x-r*.85,y:eyeR.y},"#00eaff",Math.max(3,w*.006));
+  if(effect==="glasses" || effect==="sunglasses"){
+    const radius=eyeDistance*.27;
+    ctx.save();
+    ctx.translate(centerX,centerY);
+    ctx.rotate(angle);
+    ctx.lineWidth=Math.max(2.5,w*.005);
+    ctx.strokeStyle=effect==="glasses"?"#00eaff":"#b7c6d8";
+    ctx.fillStyle=effect==="glasses"
+      ?"rgba(0,234,255,.12)"
+      :"rgba(12,15,28,.88)";
+    ctx.shadowColor=ctx.strokeStyle;
+    ctx.shadowBlur=effect==="glasses"?9:0;
+
+    for(const x of [-eyeDistance/2,eyeDistance/2]){
+      ctx.beginPath();
+      ctx.ellipse(x,0,radius,radius*.72,0,0,Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     ctx.shadowBlur=0;
+    ctx.beginPath();
+    ctx.moveTo(-radius*.15,0);
+    ctx.lineTo(radius*.15,0);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  if(name==="cat" && forehead && eyeL && eyeR){
-    const d=Math.abs(eyeR.x-eyeL.x);
-    const topY=forehead.y-d*.08;
-    ctx.fillStyle="#ff75d8";
-    ctx.strokeStyle="#ffb1e8";
-    ctx.lineWidth=2;
+  if(effect==="cat" || effect==="bunny"){
+    const earWidth=faceWidth*.19;
+    const earHeight=effect==="bunny"?faceWidth*.48:faceWidth*.34;
+    const baseY=forehead.y+faceWidth*.06;
+    const offset=faceWidth*.29;
+
+    ctx.fillStyle=effect==="cat"?"#ff70d5":"#f7f0ff";
+    ctx.strokeStyle=effect==="cat"?"#ffb7ec":"#c7b9ff";
+    ctx.lineWidth=Math.max(2,w*.003);
+
     ctx.beginPath();
-    ctx.moveTo(forehead.x-d*.48,topY+d*.42);
-    ctx.lineTo(forehead.x-d*.45,topY-d*.12);
-    ctx.lineTo(forehead.x-d*.12,topY+d*.30);
-    ctx.closePath();
-    ctx.moveTo(forehead.x+d*.48,topY+d*.42);
-    ctx.lineTo(forehead.x+d*.45,topY-d*.12);
-    ctx.lineTo(forehead.x+d*.12,topY+d*.30);
-    ctx.closePath();
+
+    if(effect==="cat"){
+      ctx.moveTo(centerX-offset-earWidth*.65,baseY);
+      ctx.lineTo(centerX-offset-earWidth*.40,baseY-earHeight);
+      ctx.lineTo(centerX-offset+earWidth*.85,baseY-earWidth*.15);
+      ctx.closePath();
+
+      ctx.moveTo(centerX+offset-earWidth*.85,baseY-earWidth*.15);
+      ctx.lineTo(centerX+offset+earWidth*.40,baseY-earHeight);
+      ctx.lineTo(centerX+offset+earWidth*.65,baseY);
+      ctx.closePath();
+    }else{
+      ctx.ellipse(centerX-offset,baseY-earHeight*.45,
+        earWidth*.48,earHeight*.60,-.12,0,Math.PI*2);
+      ctx.ellipse(centerX+offset,baseY-earHeight*.45,
+        earWidth*.48,earHeight*.60,.12,0,Math.PI*2);
+    }
+
     ctx.fill();
     ctx.stroke();
+
+    if(effect==="bunny"){
+      ctx.strokeStyle="#f2a7c4";
+      ctx.lineWidth=Math.max(3,w*.008);
+      ctx.beginPath();
+      ctx.ellipse(centerX-offset,baseY-earHeight*.45,
+        earWidth*.19,earHeight*.39,-.12,0,Math.PI*2);
+      ctx.ellipse(centerX+offset,baseY-earHeight*.45,
+        earWidth*.19,earHeight*.39,.12,0,Math.PI*2);
+      ctx.stroke();
+    }
   }
 
-  if(name==="mustache" && nose && mouth){
-    const d=Math.abs((eyeR?.x||w*.6)-(eyeL?.x||w*.4));
-    const y=(nose.y+mouth.y)/2;
-    ctx.fillStyle="#27202a";
+  if(effect==="mustache"){
+    const y=mouth? (nose.y+mouth.y)/2 : nose.y+faceWidth*.13;
+    const mw=faceWidth*.20;
+    const mh=faceWidth*.055;
+    ctx.fillStyle="#28202b";
     ctx.beginPath();
-    ctx.ellipse(nose.x-d*.09,y,d*.10,d*.035,-.15,0,Math.PI*2);
-    ctx.ellipse(nose.x+d*.09,y,d*.10,d*.035,.15,0,Math.PI*2);
+    ctx.moveTo(nose.x,y);
+    ctx.bezierCurveTo(nose.x-mw*.25,y-mh*1.2,
+      nose.x-mw*.55,y-mh*.3,nose.x-mw,y+mh*.4);
+    ctx.bezierCurveTo(nose.x-mw*.7,y+mh*1.9,
+      nose.x-mw*.2,y+mh*1.6,nose.x,y+mh*.55);
+    ctx.bezierCurveTo(nose.x+mw*.2,y+mh*1.6,
+      nose.x+mw*.7,y+mh*1.9,nose.x+mw,y+mh*.4);
+    ctx.bezierCurveTo(nose.x+mw*.55,y-mh*.3,
+      nose.x+mw*.25,y-mh*1.2,nose.x,y);
     ctx.fill();
   }
 
-  if(name==="neon" && forehead && chin && eyeL && eyeR){
-    const centerX=(eyeL.x+eyeR.x)/2;
-    const width=Math.abs(eyeR.x-eyeL.x)*1.05;
-    const centerY=(forehead.y+chin.y)/2;
-    const height=Math.abs(chin.y-forehead.y)*.62;
-    ctx.strokeStyle="#00ff9d";
+  if(effect==="dog"){
+    const size=faceWidth*.07;
+    ctx.fillStyle="#17121b";
+    ctx.beginPath();
+    ctx.moveTo(nose.x-size,nose.y-size*.2);
+    ctx.quadraticCurveTo(nose.x,nose.y-size*1.25,
+      nose.x+size,nose.y-size*.2);
+    ctx.quadraticCurveTo(nose.x+size*.65,nose.y+size*.75,
+      nose.x,nose.y+size*.95);
+    ctx.quadraticCurveTo(nose.x-size*.65,nose.y+size*.75,
+      nose.x-size,nose.y-size*.2);
+    ctx.fill();
+    ctx.fillStyle="#ff8dbd";
+    ctx.beginPath();
+    ctx.ellipse(nose.x,nose.y+size*.65,size*.33,size*.18,0,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  if(effect==="neon"){
+    ctx.strokeStyle="#00ffab";
     ctx.lineWidth=Math.max(3,w*.006);
-    ctx.shadowColor="#00ff9d";
+    ctx.shadowColor="#00ffab";
     ctx.shadowBlur=18;
     ctx.beginPath();
-    ctx.ellipse(centerX,centerY,width,height,0,0,Math.PI*2);
+    ctx.moveTo(forehead.x,forehead.y);
+    ctx.bezierCurveTo(
+      forehead.x+faceWidth*.50,forehead.y+faceWidth*.03,
+      chin.x+faceWidth*.45,chin.y-faceWidth*.20,
+      chin.x,chin.y
+    );
+    ctx.bezierCurveTo(
+      chin.x-faceWidth*.45,chin.y-faceWidth*.20,
+      forehead.x-faceWidth*.50,forehead.y+faceWidth*.03,
+      forehead.x,forehead.y
+    );
     ctx.stroke();
     ctx.shadowBlur=0;
   }
 
-  if(name==="hearts" && forehead && chin && eyeL && eyeR){
-    const d=Math.abs(eyeR.x-eyeL.x);
-    ctx.font=`${Math.max(20,d*.22)}px Arial`;
+  if(effect==="hearts" || effect==="stars"){
+    const size=Math.max(20,eyeDistance*.27);
     ctx.textAlign="center";
-    ctx.fillText("💗",forehead.x-d*.55,forehead.y-d*.20);
-    ctx.fillText("💖",forehead.x+d*.55,forehead.y-d*.25);
+    ctx.font=`${size}px Arial`;
+    if(effect==="hearts"){
+      ctx.fillText("💗",forehead.x-faceWidth*.30,forehead.y-size*.15);
+      ctx.fillText("💖",forehead.x+faceWidth*.30,forehead.y-size*.35);
+    }else{
+      ctx.fillText("⭐",forehead.x-faceWidth*.30,forehead.y-size*.15);
+      ctx.fillText("✨",forehead.x,forehead.y-size*.65);
+      ctx.fillText("⭐",forehead.x+faceWidth*.30,forehead.y-size*.35);
+    }
   }
 
   ctx.restore();
 }
 
 async function loadAI(){
-  if(faceLandmarker) return faceLandmarker;
+  if(landmarker) return landmarker;
   if(modelPromise) return modelPromise;
 
   modelPromise=(async()=>{
-    say("Loading AI face model... Please wait.");
+    say("Loading AI model. Please wait...");
+
     const vision=await import(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
     );
+
     const files=await vision.FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
     );
-    faceLandmarker=await vision.FaceLandmarker.createFromOptions(files,{
+
+    landmarker=await vision.FaceLandmarker.createFromOptions(files,{
       baseOptions:{
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
         delegate:"CPU"
       },
       runningMode:"VIDEO",
-      numFaces:1
+      numFaces:1,
+      minFaceDetectionConfidence:.5,
+      minFacePresenceConfidence:.5,
+      minTrackingConfidence:.5
     });
-    return faceLandmarker;
+
+    return landmarker;
   })();
 
   try{
@@ -265,12 +372,25 @@ async function loadAI(){
   }
 }
 
+function stopTracks(){
+  if(stream){
+    stream.getTracks().forEach(track=>track.stop());
+    stream=null;
+  }
+}
+
 async function startCamera(){
   try{
-    stopTracksOnly();
-    cancelAnimationFrame(raf);
+    if(recording){
+      say("Stop recording before switching or restarting the camera.");
+      return;
+    }
+
     running=false;
+    cancelAnimationFrame(raf);
+    stopTracks();
     landmarks=null;
+    smoothLandmarks=null;
 
     say("Starting camera...");
     const height=Number($("resolution").value);
@@ -288,59 +408,62 @@ async function startCamera(){
     await video.play();
     setCanvasSize();
     running=true;
+    lastVideoTime=-1;
     raf=requestAnimationFrame(drawLoop);
-    say("Camera running. Loading AI tracking...");
 
     try{
       await loadAI();
       if(running) say("AI face tracking is ready.");
     }catch(error){
-      say("Camera works, but AI model failed to load. Check internet and reload.");
       console.error(error);
+      say("Camera works, but AI model failed. Check internet and reload.");
     }
   }catch(error){
     say("Camera error: "+error.message);
   }
 }
 
-function stopTracksOnly(){
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-    stream=null;
-  }
-}
-
-function stopCamera(){
-  running=false;
-  cancelAnimationFrame(raf);
-  if(recording && recorder && recorder.state!=="inactive"){
-    recorder.stop();
-  }
-  stopTracksOnly();
-  video.srcObject=null;
-  landmarks=null;
-  ctx.clearRect(0,0,overlay.width,overlay.height);
-  say("Camera stopped.");
-}
-
 function drawLoop(){
   if(!running) return;
+
   if(video.readyState>=2){
     setCanvasSize();
     const now=performance.now();
 
-    // Limit AI inference frequency to reduce CPU usage.
-    if(faceLandmarker && now-lastDetect>80){
+    // Detect once per new video frame, with a low-RAM-friendly rate limit.
+    if(landmarker && video.currentTime!==lastVideoTime && now-lastDetect>90){
+      lastVideoTime=video.currentTime;
       lastDetect=now;
+
       try{
-        const result=faceLandmarker.detectForVideo(video,now);
-        landmarks=result.faceLandmarks?.[0] || null;
+        const result=landmarker.detectForVideo(video,now);
+        const next=result.faceLandmarks?.[0] || null;
+
+        if(next){
+          if(!smoothLandmarks || smoothLandmarks.length!==next.length){
+            smoothLandmarks=next.map(p=>({x:p.x,y:p.y,z:p.z||0}));
+          }else{
+            // Smooth landmark movement to reduce jitter.
+            const amount=.55;
+            smoothLandmarks=next.map((p,i)=>({
+              x:smoothLandmarks[i].x*(1-amount)+p.x*amount,
+              y:smoothLandmarks[i].y*(1-amount)+p.y*amount,
+              z:(smoothLandmarks[i].z||0)*(1-amount)+(p.z||0)*amount
+            }));
+          }
+          landmarks=smoothLandmarks;
+        }else{
+          landmarks=null;
+          smoothLandmarks=null;
+        }
       }catch(error){
         console.error(error);
       }
     }
+
     drawEffects();
   }
+
   raf=requestAnimationFrame(drawLoop);
 }
 
@@ -359,29 +482,47 @@ function makeOutputCanvas(){
   c.setTransform(1,0,0,1,0,0);
   c.filter="none";
   c.drawImage(overlay,0,0,out.width,out.height);
+
   return out;
 }
 
 $("start").addEventListener("click",startCamera);
 
 $("switch").addEventListener("click",async()=>{
-  facing=facing==="user" ? "environment" : "user";
+  facing=facing==="user"?"environment":"user";
   await startCamera();
 });
 
-$("stop").addEventListener("click",stopCamera);
+$("stop").addEventListener("click",()=>{
+  running=false;
+  cancelAnimationFrame(raf);
+
+  if(recording && recorder && recorder.state!=="inactive"){
+    recorder.stop();
+  }
+
+  stopTracks();
+  video.srcObject=null;
+  landmarks=null;
+  smoothLandmarks=null;
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  say("Camera stopped.");
+});
 
 $("photoBtn").addEventListener("click",()=>{
   try{
     const out=makeOutputCanvas();
     const url=out.toDataURL("image/png");
+
     $("photo").src=url;
     $("photo").hidden=false;
-    const link=$("download");
-    link.href=url;
-    link.download="live-ai-photo.png";
-    link.textContent="Download Photo";
-    link.hidden=false;
+
+    const a=$("download");
+    a.href=url;
+    a.download="live-ai-photo.png";
+    a.textContent="Download Photo";
+    a.hidden=false;
+
     say("Photo captured successfully.");
   }catch(error){
     say(error.message);
@@ -395,17 +536,21 @@ $("recordBtn").addEventListener("click",()=>{
   }
 
   try{
-    if(!video.videoWidth || !stream) throw new Error("Start the camera first.");
-    if(!window.MediaRecorder) throw new Error("Video recording is not supported by this browser.");
+    if(!video.videoWidth || !stream){
+      throw new Error("Start the camera first.");
+    }
+    if(!window.MediaRecorder){
+      throw new Error("Video recording is not supported by this browser.");
+    }
 
     recordCanvas=document.createElement("canvas");
     recordCanvas.width=video.videoWidth;
     recordCanvas.height=video.videoHeight;
     recordCtx=recordCanvas.getContext("2d");
-
     recordStream=recordCanvas.captureStream(20);
+
     const mime=MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-      ? "video/webm;codecs=vp8" : "video/webm";
+      ?"video/webm;codecs=vp8":"video/webm";
 
     recorder=new MediaRecorder(recordStream,{mimeType:mime});
     chunks=[];
@@ -416,14 +561,20 @@ $("recordBtn").addEventListener("click",()=>{
 
     recorder.onerror=()=>{
       recording=false;
+      cancelAnimationFrame(recordRaf);
       $("recordBtn").textContent="Start Recording";
-      say("Recording error. Try again.");
+      say("Recording error. Please try again.");
     };
 
     recorder.onstop=()=>{
       recording=false;
+      cancelAnimationFrame(recordRaf);
       $("recordBtn").textContent="Start Recording";
-      if(recordStream) recordStream.getTracks().forEach(t=>t.stop());
+
+      if(recordStream){
+        recordStream.getTracks().forEach(t=>t.stop());
+        recordStream=null;
+      }
 
       if(chunks.length){
         const blob=new Blob(chunks,{type:"video/webm"});
@@ -434,11 +585,14 @@ $("recordBtn").addEventListener("click",()=>{
         a.click();
         setTimeout(()=>URL.revokeObjectURL(url),60000);
         say("Video saved. Check your Downloads folder.");
+      }else{
+        say("No video data was recorded.");
       }
     };
 
     function recordFrame(){
       if(!recording) return;
+
       recordCtx.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
       recordCtx.save();
       recordCtx.translate(recordCanvas.width,0);
@@ -447,6 +601,7 @@ $("recordBtn").addEventListener("click",()=>{
       recordCtx.restore();
       recordCtx.filter="none";
       recordCtx.drawImage(overlay,0,0,recordCanvas.width,recordCanvas.height);
+
       recordRaf=requestAnimationFrame(recordFrame);
     }
 
@@ -485,13 +640,14 @@ $("reset").addEventListener("click",()=>{
   video.style.filter="none";
   $("photo").hidden=true;
   $("download").hidden=true;
-  say(running ? "Settings reset. Camera is running." : "Settings reset.");
+  say(running?"Settings reset. Camera is running.":"Settings reset.");
 });
 
 window.addEventListener("pagehide",()=>{
   running=false;
   cancelAnimationFrame(raf);
-  stopTracksOnly();
+  cancelAnimationFrame(recordRaf);
+  stopTracks();
 });
 </script>
 </body>

@@ -1,523 +1,848 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ur">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Live AI Camera Studio Pro Max</title>
+
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:14px;background:#0c101b;color:#fff;font-family:Arial,sans-serif}
-.app{max-width:950px;margin:auto}
-h1{text-align:center;font-size:25px}
-.sub{text-align:center;color:#b8c5dc;font-size:13px}
-.panel{background:#1a2130;padding:13px;border-radius:13px;margin:12px 0}
-.preview{position:relative;background:#000;overflow:hidden;border-radius:12px}
-video{width:100%;height:auto;display:block;transform:scaleX(-1)}
-canvas#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
-button,select,.filebutton{width:100%;padding:12px 8px;border:0;border-radius:9px;font-size:14px}
-button,.filebutton{background:#6554e8;color:white;font-weight:bold;text-align:center;cursor:pointer}
-button:disabled{opacity:.5}
-select,input[type=file]{background:#30394c;color:white}
-input[type=range]{width:100%}
-label{display:block;margin:13px 0 5px;font-size:14px}
-.status{background:#293247;border-radius:8px;padding:11px;font-size:13px;overflow-wrap:anywhere}
-.small{font-size:12px;color:#c3cde0;line-height:1.5}
+body{
+  margin:0;background:#080d18;color:#f4f7ff;
+  font-family:Arial,sans-serif;padding:14px
+}
+.app{max-width:1050px;margin:auto}
+h1{text-align:center;font-size:27px;margin:10px 0}
+.subtitle{text-align:center;color:#aab8d5;margin-bottom:18px}
+.panel{
+  background:#111b2d;border:1px solid #283853;
+  border-radius:16px;padding:14px;margin-bottom:14px
+}
+.stage{
+  position:relative;width:100%;background:#03060b;
+  border-radius:12px;overflow:hidden;min-height:240px
+}
+canvas{display:block;width:100%;height:auto}
+#video{display:none}
+.status{
+  padding:10px;border-radius:9px;background:#1b2940;
+  color:#bde4ff;margin-top:10px;font-size:14px
+}
+.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+button,select,input[type=file]{
+  width:100%;padding:12px;border-radius:9px;
+  border:1px solid #354966;background:#1b2b43;
+  color:white;font-size:14px
+}
+button{cursor:pointer;font-weight:bold}
+button:active{transform:scale(.98)}
+.primary{background:#1769df}
+.danger{background:#a92d43}
+label{display:block;font-size:14px;color:#dce6f8;margin-bottom:6px}
+.field{margin-bottom:12px}
+input[type=range]{width:100%;accent-color:#40a5ff}
+select{margin-bottom:4px}
+.small{font-size:12px;color:#aab8d5;line-height:1.6}
 .gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.gallery img{width:100%;border-radius:8px}
-.item{background:#252d3d;padding:7px;border-radius:9px;overflow:hidden}
-.item a{color:#9edcff;font-size:12px}
-#stickerPreview{width:65px;height:65px;object-fit:contain;background:#30394c;border-radius:8px}
-#photoTimer{background:#30394c;color:white}
-.hidden{display:none!important}
+.gallery img{width:100%;border-radius:9px;background:#03060b}
+.gallery a{display:block;text-align:center;color:#8dcaff;margin:6px 0 12px}
+.toggle{display:flex;gap:9px;align-items:center;margin:10px 0}
+.toggle input{width:18px;height:18px}
+@media(min-width:700px){
+ .controls{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .gallery{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 </style>
 </head>
+
 <body>
 <div class="app">
-<h1>Live AI Camera Studio Pro Max</h1>
-<div class="sub">AI Face Tracking · AR Stickers · Photo Studio · Video</div>
+  <h1>✨ Live AI Camera Studio Pro Max</h1>
+  <div class="subtitle">Fast Face Tracking • AR Filters • Photo • Video</div>
 
-<div class="panel">
-<div class="preview">
-<video id="video" autoplay muted playsinline></video>
-<canvas id="overlay"></canvas>
-</div>
-<div class="status" id="status">Ready. Start the camera.</div>
-</div>
+  <div class="panel">
+    <div class="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas" width="640" height="480"></canvas>
+    </div>
+    <div id="status" class="status">تیار ہے۔ پہلے Start Camera دبائیں۔</div>
+  </div>
 
-<div class="panel">
-<div class="grid">
-<button id="start">Start Camera</button>
-<button id="switch">Switch Camera</button>
+  <div class="panel">
+    <h3>📷 Camera Controls</h3>
+    <div class="controls">
+      <button class="primary" id="startBtn">▶ Start Camera</button>
+      <button id="switchBtn">🔄 Switch Camera</button>
+      <button class="danger" id="stopBtn">⏹ Stop Camera</button>
+      <button class="primary" id="photoBtn">📸 Take Photo</button>
+      <button class="primary" id="recordBtn">🔴 Start Recording</button>
+      <button id="downloadLastBtn">⬇ Download Last Photo</button>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label for="resolution">Camera Resolution</label>
+      <select id="resolution">
+        <option value="360">360p — سب سے ہلکا</option>
+        <option value="480" selected>480p — تجویز کردہ</option>
+        <option value="720">720p — زیادہ بوجھ</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="timer">Photo Timer</label>
+      <select id="timer">
+        <option value="0">فوراً تصویر</option>
+        <option value="3">3 سیکنڈ</option>
+        <option value="5">5 سیکنڈ</option>
+      </select>
+    </div>
+  </div>
 
-<select id="effect" aria-label="Filter">
-<option value="none">No Effect</option>
-<option value="glasses">AI Glasses</option>
-<option value="sunglasses">Dark Sunglasses</option>
-<option value="cat">Cat Ears</option>
-<option value="bunny">Bunny Ears</option>
-<option value="mustache">Mustache</option>
-<option value="dog">Dog Nose</option>
-<option value="neon">Neon Face</option>
-<option value="hearts">Floating Hearts</option>
-<option value="stars">Star Crown</option>
-<option value="sticker">Custom AR Sticker</option>
-</select>
+  <div class="panel">
+    <h3>🎭 AI Face Filters</h3>
+    <div class="controls">
+      <button data-filter="none">No Filter</button>
+      <button data-filter="glasses">🤓 AI Glasses</button>
+      <button data-filter="sunglasses">🕶️ Dark Sunglasses</button>
+      <button data-filter="cat">🐱 Cat Ears</button>
+      <button data-filter="bunny">🐰 Bunny Ears</button>
+      <button data-filter="mustache">🥸 Mustache</button>
+      <button data-filter="dog">🐶 Dog Nose</button>
+      <button data-filter="neon">⚡ Neon Face</button>
+      <button data-filter="hearts">💕 Floating Hearts</button>
+      <button data-filter="crown">👑 Star Crown</button>
+      <button data-filter="custom">🖼️ Custom Sticker</button>
+      <button id="meshBtn">Face Mesh: OFF</button>
+    </div>
 
-<select id="resolution" aria-label="Resolution">
-<option value="360">360p - Performance</option>
-<option value="480" selected>480p - Recommended</option>
-<option value="720">720p - HD</option>
-</select>
+    <div class="field" style="margin-top:14px">
+      <label for="stickerUpload">اپنا PNG / JPG اسٹیکر اپ لوڈ کریں</label>
+      <input id="stickerUpload" type="file" accept="image/png,image/jpeg,image/webp">
+      <div class="small">شفاف پس منظر والا PNG اسٹیکر بہتر رہے گا۔ زیادہ سے زیادہ 5 MB۔</div>
+    </div>
+    <div class="field">
+      <label for="stickerSize">Custom Sticker Size</label>
+      <input id="stickerSize" type="range" min="40" max="220" value="110">
+    </div>
+  </div>
 
-<button id="photoBtn">Take Photo</button>
-<button id="recordBtn">Start Recording</button>
-<button id="stop">Stop Camera</button>
-<button id="reset">Reset Settings</button>
-</div>
+  <div class="panel">
+    <h3>🎨 Picture Adjustments</h3>
+    <div class="field">
+      <label for="brightness">Brightness</label>
+      <input id="brightness" type="range" min="50" max="150" value="100">
+    </div>
+    <div class="field">
+      <label for="contrast">Contrast</label>
+      <input id="contrast" type="range" min="50" max="150" value="100">
+    </div>
+    <div class="toggle">
+      <input type="checkbox" id="mirror" checked>
+      <label for="mirror" style="margin:0">Mirror selfie view</label>
+    </div>
+    <div class="small">تصاویر PNG اور ویڈیو WebM فارمیٹ میں محفوظ ہوں گی۔ ویڈیو میں آواز شامل نہیں ہے۔</div>
+  </div>
 
-<label for="timer">Photo Timer</label>
-<select id="timer">
-<option value="0">No timer</option>
-<option value="3">3 seconds</option>
-<option value="5">5 seconds</option>
-</select>
-
-<label for="brightness">Brightness: <span id="bv">100%</span></label>
-<input id="brightness" type="range" min="50" max="150" value="100">
-
-<label for="contrast">Contrast: <span id="cv">100%</span></label>
-<input id="contrast" type="range" min="50" max="150" value="100">
-
-<label for="stickerFile">Upload your own transparent PNG sticker</label>
-<input id="stickerFile" type="file" accept="image/png,image/webp,image/jpeg">
-<p class="small">Use a small PNG with a transparent background for the best AR effect.</p>
-<div class="grid">
-<img id="stickerPreview" alt="Sticker preview" hidden>
-<div>
-<label for="stickerSize">Sticker size: <span id="sv">100%</span></label>
-<input id="stickerSize" type="range" min="40" max="180" value="100">
-</div>
-</div>
-
-<label>
-<input id="showMesh" type="checkbox">
- Show AI face landmark points
-</label>
-</div>
-
-<div class="panel">
-<strong>Photo Gallery — This Session</strong>
-<p class="small">Photos appear here after capture. Download them to keep them permanently.</p>
-<div id="gallery" class="gallery"></div>
-</div>
-
-<p class="small">
-AI model requires internet. For 4 GB RAM use 360p or 480p. Recording is silent.
-The gallery is temporary and clears when the page is reloaded.
-</p>
+  <div class="panel">
+    <h3>🖼️ Session Photo Gallery</h3>
+    <div class="small" style="margin-bottom:10px">تصاویر اسی سیشن میں دکھائی جائیں گی۔ مستقل محفوظ رکھنے کے لیے Download دبائیں۔</div>
+    <div id="gallery" class="gallery"></div>
+  </div>
 </div>
 
 <script type="module">
-const $=id=>document.getElementById(id);
-const video=$("video");
-const overlay=$("overlay");
-const ctx=overlay.getContext("2d");
-const status=$("status");
+import {
+  FaceLandmarker,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
-let stream=null,landmarker=null,modelPromise=null;
-let facing="user",running=false,raf=0;
-let landmarks=null,smooth=null,lastDetect=0,lastVideoTime=-1;
-let recorder=null,chunks=[],recording=false;
-let recordCanvas=null,recordCtx=null,recordStream=null,recordRaf=0;
-let stickerImage=null,photoBusy=false;
+const $ = id => document.getElementById(id);
+const video = $("video");
+const canvas = $("canvas");
+const ctx = canvas.getContext("2d", {alpha:false});
+const statusBox = $("status");
 
-function say(s){status.textContent=s}
+let stream = null;
+let faceLandmarker = null;
+let modelPromise = null;
+let running = false;
+let facingMode = "user";
+let currentFilter = "none";
+let showMesh = false;
+let customImage = null;
+let lastPhotoUrl = null;
+let recorder = null;
+let recordingCanvas = null;
+let recordingCtx = null;
+let recordingStream = null;
+let recordingChunks = [];
+let lastDetectionTime = 0;
+let lastVideoTime = -1;
+let lastLandmarks = null;
+let smoothedLandmarks = null;
+let lastGoodFaceTime = 0;
+let animationId = 0;
+let photoBusy = false;
+let lastStatusTime = 0;
 
-function stopTracks(){
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+function setStatus(message){
+  statusBox.textContent = message;
 }
 
-function sizeCanvas(){
-  const w=video.videoWidth||640,h=video.videoHeight||480;
-  if(overlay.width!==w)overlay.width=w;
-  if(overlay.height!==h)overlay.height=h;
+function sayOccasionally(message){
+  const now = performance.now();
+  if(now-lastStatusTime>1500){
+    setStatus(message);
+    lastStatusTime=now;
+  }
 }
 
-function pt(i){
-  if(!landmarks||!landmarks[i])return null;
-  return {x:(1-landmarks[i].x)*overlay.width,y:landmarks[i].y*overlay.height};
+async function loadAI(){
+  if(faceLandmarker) return faceLandmarker;
+  if(modelPromise) return modelPromise;
+
+  modelPromise = (async()=>{
+    setStatus("AI Face Tracking ماڈل لوڈ ہو رہا ہے...");
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision,{
+      baseOptions:{
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate:"CPU"
+      },
+      runningMode:"VIDEO",
+      numFaces:1,
+      outputFaceBlendshapes:false,
+      outputFacialTransformationMatrixes:false
+    });
+    return faceLandmarker;
+  })();
+
+  try{
+    return await modelPromise;
+  }catch(error){
+    modelPromise=null;
+    throw error;
+  }
 }
 
-function line(a,b,color,width){
-  if(!a||!b)return;
-  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
-  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();
+function cameraHeight(){
+  return Number($("resolution").value);
 }
 
-function drawEffects(){
-  const w=overlay.width,h=overlay.height;
-  ctx.clearRect(0,0,w,h);
-  if(!landmarks)return;
+async function startCamera(){
+  if(stream){
+    if(video.srcObject) return;
+  }
+  try{
+    if(recorder && recorder.state==="recording"){
+      setStatus("پہلے ویڈیو ریکارڈنگ بند کریں، پھر کیمرا تبدیل کریں۔");
+      return;
+    }
 
-  const effect=$("effect").value;
-  const outerL=pt(33),innerL=pt(133),innerR=pt(362),outerR=pt(263);
-  const nose=pt(1),mouth=pt(13),forehead=pt(10),chin=pt(152);
+    setStatus("کیمرا شروع ہو رہا ہے...");
+    if(stream){
+      stream.getTracks().forEach(track=>track.stop());
+      stream=null;
+    }
 
-  if(!outerL||!innerL||!innerR||!outerR||!nose||!forehead||!chin)return;
+    const h=cameraHeight();
+    const w=Math.round(h*4/3);
 
-  const eyeL={x:(outerL.x+innerL.x)/2,y:(outerL.y+innerL.y)/2};
-  const eyeR={x:(innerR.x+outerR.x)/2,y:(innerR.y+outerR.y)/2};
-  const dx=eyeR.x-eyeL.x,dy=eyeR.y-eyeL.y;
-  const distance=Math.hypot(dx,dy),angle=Math.atan2(dy,dx);
-  const cx=(eyeL.x+eyeR.x)/2,cy=(eyeL.y+eyeR.y)/2;
-  const fw=distance*2.15;
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{
+        facingMode:{ideal:facingMode},
+        width:{ideal:w},
+        height:{ideal:h},
+        frameRate:{ideal:30,max:30}
+      }
+    });
 
+    video.srcObject=stream;
+    await video.play();
+
+    canvas.width=video.videoWidth||w;
+    canvas.height=video.videoHeight||h;
+
+    lastDetectionTime=0;
+    lastVideoTime=-1;
+    lastLandmarks=null;
+    smoothedLandmarks=null;
+    lastGoodFaceTime=0;
+    running=true;
+
+    setStatus("کیمرا چل رہا ہے۔ AI چہرہ تلاش کر رہا ہے...");
+    await loadAI();
+    if(running) drawLoop();
+  }catch(error){
+    console.error(error);
+    setStatus("کیمرا یا AI شروع نہیں ہو سکا: "+(error.message||error));
+  }
+}
+
+function stopCamera(){
+  running=false;
+  if(animationId) cancelAnimationFrame(animationId);
+  animationId=0;
+
+  if(recorder && recorder.state==="recording"){
+    recorder.stop();
+  }
+
+  if(stream){
+    stream.getTracks().forEach(track=>track.stop());
+    stream=null;
+  }
+
+  video.srcObject=null;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#03060b";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#dce6f8";
+  ctx.font="20px Arial";
+  ctx.textAlign="center";
+  ctx.fillText("Camera Stopped",canvas.width/2,canvas.height/2);
+  setStatus("کیمرا بند ہے۔ دوبارہ شروع کرنے کے لیے Start Camera دبائیں۔");
+}
+
+function getPoint(landmarks,index){
+  const p=landmarks && landmarks[index];
+  if(!p) return null;
+  return {x:p.x*canvas.width,y:p.y*canvas.height};
+}
+
+function averagePoint(landmarks,indices){
+  let x=0,y=0,count=0;
+  for(const index of indices){
+    const p=getPoint(landmarks,index);
+    if(p){x+=p.x;y+=p.y;count++;}
+  }
+  return count?{x:x/count,y:y/count}:null;
+}
+
+function distance(a,b){
+  if(!a||!b) return 1;
+  return Math.hypot(a.x-b.x,a.y-b.y);
+}
+
+function faceGeometry(lm){
+  const leftEye=averagePoint(lm,[33,133]);
+  const rightEye=averagePoint(lm,[362,263]);
+  const forehead=getPoint(lm,10);
+  const chin=getPoint(lm,152);
+  const nose=getPoint(lm,1);
+  const mouth=getPoint(lm,13);
+
+  if(!leftEye||!rightEye||!forehead||!chin||!nose) return null;
+
+  const eyeMid={x:(leftEye.x+rightEye.x)/2,y:(leftEye.y+rightEye.y)/2};
+  const eyeDist=distance(leftEye,rightEye);
+  const angle=Math.atan2(rightEye.y-leftEye.y,rightEye.x-leftEye.x);
+  const faceH=distance(forehead,chin);
+
+  return {leftEye,rightEye,forehead,chin,nose,mouth,eyeMid,eyeDist,angle,faceH};
+}
+
+function smoothFace(raw){
+  if(!raw) return null;
+  if(!smoothedLandmarks || smoothedLandmarks.length!==raw.length){
+    smoothedLandmarks=raw.map(p=>({x:p.x,y:p.y,z:p.z||0}));
+    return smoothedLandmarks;
+  }
+
+  // High response: 85% of each new position is applied immediately.
+  // This reduces the lag when the face moves quickly.
+  const alpha=0.85;
+  for(let i=0;i<raw.length;i++){
+    smoothedLandmarks[i].x += (raw[i].x-smoothedLandmarks[i].x)*alpha;
+    smoothedLandmarks[i].y += (raw[i].y-smoothedLandmarks[i].y)*alpha;
+    smoothedLandmarks[i].z += ((raw[i].z||0)-smoothedLandmarks[i].z)*alpha;
+  }
+  return smoothedLandmarks;
+}
+
+function drawLine(points,color,width=3){
+  if(points.length<2) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x,points[0].y);
+  for(let i=1;i<points.length;i++) ctx.lineTo(points[i].x,points[i].y);
+  ctx.strokeStyle=color;
+  ctx.lineWidth=width;
+  ctx.lineCap="round";
+  ctx.lineJoin="round";
+  ctx.stroke();
+}
+
+function drawGlasses(g,dark=false){
+  const {leftEye,rightEye,eyeMid,eyeDist,angle}=g;
+  const w=eyeDist*0.57;
+  const h=w*0.65;
   ctx.save();
-  ctx.lineCap="round";ctx.lineJoin="round";
+  ctx.translate(eyeMid.x,eyeMid.y);
+  ctx.rotate(angle);
+  ctx.lineWidth=Math.max(2,eyeDist*0.055);
+  ctx.strokeStyle=dark?"#10131b":"#101b2b";
+  ctx.fillStyle=dark?"rgba(8,10,18,.96)":"rgba(95,210,255,.35)";
+  ctx.shadowColor=dark?"#000":"#61d8ff";
+  ctx.shadowBlur=dark?2:5;
 
-  if(effect==="glasses"||effect==="sunglasses"){
-    const r=distance*.27;
-    ctx.save();ctx.translate(cx,cy);ctx.rotate(angle);
-    ctx.lineWidth=Math.max(3,w*.005);
-    ctx.strokeStyle=effect==="glasses"?"#00eaff":"#b7c6d8";
-    ctx.fillStyle=effect==="glasses"?"rgba(0,234,255,.12)":"rgba(10,12,24,.9)";
-    ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=effect==="glasses"?10:0;
-    for(const x of [-distance/2,distance/2]){
-      ctx.beginPath();ctx.ellipse(x,0,r,r*.72,0,0,Math.PI*2);
-      ctx.fill();ctx.stroke();
-    }
-    ctx.shadowBlur=0;
-    ctx.beginPath();ctx.moveTo(-r*.15,0);ctx.lineTo(r*.15,0);ctx.stroke();
-    ctx.restore();
-  }
+  ctx.beginPath();
+  ctx.roundRect(-eyeDist*0.58,-h/2,w,h,Math.min(12,h*.2));
+  ctx.roundRect(eyeDist*0.01,-h/2,w,h,Math.min(12,h*.2));
+  ctx.fill();
+  ctx.stroke();
 
-  if(effect==="cat"||effect==="bunny"){
-    const ew=fw*.19,eh=effect==="cat"?fw*.34:fw*.48;
-    const by=forehead.y+fw*.06,off=fw*.29;
-    ctx.fillStyle=effect==="cat"?"#ff70d5":"#f7f0ff";
-    ctx.strokeStyle=effect==="cat"?"#ffb7ec":"#c7b9ff";
-    ctx.lineWidth=Math.max(2,w*.003);
-    ctx.beginPath();
+  ctx.beginPath();
+  ctx.moveTo(-eyeDist*.02,0);
+  ctx.lineTo(eyeDist*.02,0);
+  ctx.moveTo(-eyeDist*.58,0);
+  ctx.lineTo(-eyeDist*.75,-h*.05);
+  ctx.moveTo(eyeDist*.58,0);
+  ctx.lineTo(eyeDist*.75,-h*.05);
+  ctx.stroke();
+  ctx.restore();
+}
 
-    if(effect==="cat"){
-      ctx.moveTo(cx-off-ew*.65,by);
-      ctx.lineTo(cx-off-ew*.4,by-eh);
-      ctx.lineTo(cx-off+ew*.85,by-ew*.15);
-      ctx.closePath();
-      ctx.moveTo(cx+off-ew*.85,by-ew*.15);
-      ctx.lineTo(cx+off+ew*.4,by-eh);
-      ctx.lineTo(cx+off+ew*.65,by);
-      ctx.closePath();
-    }else{
-      ctx.ellipse(cx-off,by-eh*.45,ew*.48,eh*.60,-.12,0,Math.PI*2);
-      ctx.ellipse(cx+off,by-eh*.45,ew*.48,eh*.60,.12,0,Math.PI*2);
-    }
-    ctx.fill();ctx.stroke();
-
-    if(effect==="bunny"){
-      ctx.strokeStyle="#f2a7c4";ctx.lineWidth=Math.max(3,w*.008);
-      ctx.beginPath();
-      ctx.ellipse(cx-off,by-eh*.45,ew*.19,eh*.39,-.12,0,Math.PI*2);
-      ctx.ellipse(cx+off,by-eh*.45,ew*.19,eh*.39,.12,0,Math.PI*2);
-      ctx.stroke();
-    }
-  }
-
-  if(effect==="mustache"){
-    const y=mouth?(nose.y+mouth.y)/2:nose.y+fw*.13;
-    const mw=fw*.20,mh=fw*.055;
-    ctx.fillStyle="#28202b";ctx.beginPath();
-    ctx.moveTo(nose.x,y);
-    ctx.bezierCurveTo(nose.x-mw*.25,y-mh*1.2,nose.x-mw*.55,y-mh*.3,nose.x-mw,y+mh*.4);
-    ctx.bezierCurveTo(nose.x-mw*.7,y+mh*1.9,nose.x-mw*.2,y+mh*1.6,nose.x,y+mh*.55);
-    ctx.bezierCurveTo(nose.x+mw*.2,y+mh*1.6,nose.x+mw*.7,y+mh*1.9,nose.x+mw,y+mh*.4);
-    ctx.bezierCurveTo(nose.x+mw*.55,y-mh*.3,nose.x+mw*.25,y-mh*1.2,nose.x,y);
-    ctx.fill();
-  }
-
-  if(effect==="dog"){
-    const s=fw*.07;
-    ctx.fillStyle="#17121b";ctx.beginPath();
-    ctx.moveTo(nose.x-s,nose.y-s*.2);
-    ctx.quadraticCurveTo(nose.x,nose.y-s*1.25,nose.x+s,nose.y-s*.2);
-    ctx.quadraticCurveTo(nose.x+s*.65,nose.y+s*.75,nose.x,nose.y+s*.95);
-    ctx.quadraticCurveTo(nose.x-s*.65,nose.y+s*.75,nose.x-s,nose.y-s*.2);
-    ctx.fill();
-    ctx.fillStyle="#ff8dbd";ctx.beginPath();
-    ctx.ellipse(nose.x,nose.y+s*.65,s*.33,s*.18,0,0,Math.PI*2);ctx.fill();
-  }
-
-  if(effect==="neon"){
-    ctx.strokeStyle="#00ffab";ctx.lineWidth=Math.max(3,w*.006);
-    ctx.shadowColor="#00ffab";ctx.shadowBlur=18;ctx.beginPath();
-    ctx.moveTo(forehead.x,forehead.y);
-    ctx.bezierCurveTo(forehead.x+fw*.5,forehead.y+fw*.03,chin.x+fw*.45,chin.y-fw*.2,chin.x,chin.y);
-    ctx.bezierCurveTo(chin.x-fw*.45,chin.y-fw*.2,forehead.x-fw*.5,forehead.y+fw*.03,forehead.x,forehead.y);
-    ctx.stroke();ctx.shadowBlur=0;
-  }
-
-  if(effect==="hearts"||effect==="stars"){
-    const s=Math.max(20,distance*.27);
-    ctx.textAlign="center";ctx.font=`${s}px Arial`;
-    if(effect==="hearts"){
-      ctx.fillText("💗",forehead.x-fw*.3,forehead.y-s*.15);
-      ctx.fillText("💖",forehead.x+fw*.3,forehead.y-s*.35);
-    }else{
-      ctx.fillText("⭐",forehead.x-fw*.3,forehead.y-s*.15);
-      ctx.fillText("✨",forehead.x,forehead.y-s*.65);
-      ctx.fillText("⭐",forehead.x+fw*.3,forehead.y-s*.35);
-    }
-  }
-
-  if(effect==="sticker"&&stickerImage){
-    const sw=fw*.65*Number($("stickerSize").value)/100;
-    const sh=sw*(stickerImage.height/stickerImage.width);
+function drawEars(g,type){
+  const {eyeMid,forehead,eyeDist,angle}=g;
+  ctx.save();
+  ctx.translate(eyeMid.x,forehead.y-eyeDist*.75);
+  ctx.rotate(angle);
+  const s=eyeDist*.52;
+  for(const side of [-1,1]){
+    const x=side*s*.62;
     ctx.save();
-    ctx.translate(forehead.x,forehead.y-fw*.12);
-    ctx.rotate(angle);
-    ctx.drawImage(stickerImage,-sw/2,-sh/2,sw,sh);
+    ctx.translate(x,0);
+    ctx.rotate(side*.14);
+
+    if(type==="bunny"){
+      ctx.fillStyle="#fff1f8";
+      ctx.strokeStyle="#edb4d1";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.ellipse(0,-s*.56,s*.25,s*.66,0,0,Math.PI*2);
+      ctx.fill();ctx.stroke();
+      ctx.fillStyle="#ef8db8";
+      ctx.beginPath();
+      ctx.ellipse(0,-s*.56,s*.11,s*.48,0,0,Math.PI*2);
+      ctx.fill();
+    }else{
+      ctx.fillStyle="#ef91ca";
+      ctx.strokeStyle="#7e3677";
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(-s*.4,0);
+      ctx.lineTo(-s*.55,-s*.8);
+      ctx.lineTo(s*.05,-s*.4);
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(s*.1,0);
+      ctx.lineTo(s*.6,-s*.8);
+      ctx.lineTo(s*.55,-s*.1);
+      ctx.closePath();ctx.fill();ctx.stroke();
+    }
     ctx.restore();
   }
+  ctx.restore();
+}
 
-  if($("showMesh").checked){
-    ctx.fillStyle="#00ff9d";
-    for(let i=0;i<landmarks.length;i+=4){
-      const p=pt(i);
-      if(p){ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,w*.002),0,Math.PI*2);ctx.fill()}
+function drawMustache(g){
+  const {nose,mouth,eyeDist,angle}=g;
+  const y=(nose.y+(mouth?mouth.y:nose.y+eyeDist*.4))/2;
+  const w=eyeDist*.68;
+  ctx.save();
+  ctx.translate(nose.x,y);
+  ctx.rotate(angle);
+  ctx.fillStyle="#30201d";
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.bezierCurveTo(-w*.22,-w*.2,-w*.53,-w*.28,-w*.57,-w*.04);
+  ctx.bezierCurveTo(-w*.6,w*.2,-w*.25,w*.15,0,w*.05);
+  ctx.bezierCurveTo(w*.25,w*.15,w*.6,w*.2,w*.57,-w*.04);
+  ctx.bezierCurveTo(w*.53,-w*.28,w*.22,-w*.2,0,0);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDog(g){
+  const {nose,eyeDist}=g;
+  const s=eyeDist*.22;
+  ctx.save();
+  ctx.translate(nose.x,nose.y);
+  ctx.fillStyle="#28202a";
+  ctx.beginPath();ctx.ellipse(0,0,s*1.2,s*.85,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#ff91b5";
+  ctx.beginPath();ctx.ellipse(0,s*.72,s*.4,s*.7,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+function drawNeon(lm,g){
+  const indices=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+  const pts=indices.map(i=>getPoint(lm,i)).filter(Boolean);
+  if(pts.length<10)return;
+  ctx.save();
+  ctx.shadowColor="#00fff0";
+  ctx.shadowBlur=14;
+  ctx.strokeStyle="#00fff0";
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  ctx.closePath();ctx.stroke();
+  ctx.restore();
+}
+
+function drawHearts(g){
+  const {forehead,eyeDist}=g;
+  ctx.font=`${Math.max(18,eyeDist*.3)}px Arial`;
+  const s=eyeDist*.6;
+  const t=performance.now()/450;
+  for(let i=0;i<3;i++){
+    const x=forehead.x+Math.sin(t+i*2)*s*(i+1)*.5;
+    const y=forehead.y-eyeDist*(.5+((t+i)%2)*.35);
+    ctx.fillText("💕",x,y);
+  }
+}
+
+function drawCrown(g){
+  const {forehead,eyeDist,angle}=g;
+  ctx.save();
+  ctx.translate(forehead.x,forehead.y-eyeDist*.28);
+  ctx.rotate(angle);
+  const w=eyeDist*.9,h=eyeDist*.5;
+  ctx.fillStyle="#ffd447";
+  ctx.strokeStyle="#b57a05";
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(-w/2,h*.4);
+  ctx.lineTo(-w/2,-h*.4);
+  ctx.lineTo(-w*.18,h*.02);
+  ctx.lineTo(0,-h*.65);
+  ctx.lineTo(w*.18,h*.02);
+  ctx.lineTo(w/2,-h*.4);
+  ctx.lineTo(w/2,h*.4);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.restore();
+}
+
+function drawCustom(g){
+  if(!customImage || !customImage.complete)return;
+  const size=Number($("stickerSize").value);
+  const ratio=customImage.naturalWidth/customImage.naturalHeight||1;
+  const w=size*(g.eyeDist/100);
+  const h=w/ratio;
+  ctx.drawImage(customImage,g.forehead.x-w/2,g.forehead.y-h*.9,w,h);
+}
+
+function drawMesh(lm){
+  const lines=[
+    [10,338,297,332,284,251,389,356,454],
+    [10,109,67,103,54,21,162,127,234],
+    [33,133,159,145,153,154,155,133],
+    [362,263,386,374,380,381,382,362],
+    [61,146,91,181,84,17,314,405,321,375,291]
+  ];
+  ctx.save();
+  ctx.strokeStyle="rgba(57,220,255,.85)";
+  ctx.lineWidth=1.4;
+  for(const line of lines){
+    const pts=line.map(i=>getPoint(lm,i)).filter(Boolean);
+    if(pts.length>1){
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x,pts[0].y);
+      for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+      ctx.stroke();
     }
   }
   ctx.restore();
 }
 
-async function loadAI(){
-  if(landmarker)return landmarker;
-  if(modelPromise)return modelPromise;
+function drawEffects(lm){
+  const g=faceGeometry(lm);
+  if(!g)return;
+  if(showMesh)drawMesh(lm);
 
-  modelPromise=(async()=>{
-    say("Loading AI model...");
-    const vision=await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
-    const files=await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-    landmarker=await vision.FaceLandmarker.createFromOptions(files,{
-      baseOptions:{
-        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        delegate:"CPU"
-      },
-      runningMode:"VIDEO",
-      numFaces:1
-    });
-    return landmarker;
-  })();
-
-  try{return await modelPromise}
-  catch(e){modelPromise=null;throw e}
-}
-
-async function startCamera(){
-  try{
-    if(recording){say("Stop recording before restarting the camera.");return}
-    running=false;cancelAnimationFrame(raf);stopTracks();
-    landmarks=null;smooth=null;
-
-    say("Starting camera...");
-    const h=Number($("resolution").value);
-    stream=await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{facingMode:{ideal:facing},width:{ideal:Math.round(h*4/3)},height:{ideal:h}}
-    });
-    video.srcObject=stream;
-    await video.play();
-    sizeCanvas();running=true;lastVideoTime=-1;
-    raf=requestAnimationFrame(loop);
-
-    try{await loadAI();if(running)say("AI face tracking ready.")}
-    catch(e){console.error(e);say("Camera works, but AI model failed to load. Check internet.")}
-  }catch(e){say("Camera error: "+e.message)}
-}
-
-function loop(){
-  if(!running)return;
-  if(video.readyState>=2){
-    sizeCanvas();
-    const now=performance.now();
-
-    if(landmarker&&video.currentTime!==lastVideoTime&&now-lastDetect>100){
-      lastVideoTime=video.currentTime;lastDetect=now;
-      try{
-        const result=landmarker.detectForVideo(video,now);
-        const next=result.faceLandmarks?.[0]||null;
-        if(next){
-          if(!smooth||smooth.length!==next.length){
-            smooth=next.map(p=>({x:p.x,y:p.y,z:p.z||0}));
-          }else{
-            smooth=next.map((p,i)=>({
-              x:smooth[i].x*.4+p.x*.6,
-              y:smooth[i].y*.4+p.y*.6,
-              z:(smooth[i].z||0)*.4+(p.z||0)*.6
-            }));
-          }
-          landmarks=smooth;
-        }else{landmarks=null;smooth=null}
-      }catch(e){console.error(e)}
-    }
-    drawEffects();
+  switch(currentFilter){
+    case "glasses":drawGlasses(g,false);break;
+    case "sunglasses":drawGlasses(g,true);break;
+    case "cat":drawEars(g,"cat");break;
+    case "bunny":drawEars(g,"bunny");break;
+    case "mustache":drawMustache(g);break;
+    case "dog":drawDog(g);break;
+    case "neon":drawNeon(lm,g);break;
+    case "hearts":drawHearts(g);break;
+    case "crown":drawCrown(g);break;
+    case "custom":drawCustom(g);break;
   }
-  raf=requestAnimationFrame(loop);
 }
 
-function outputCanvas(){
-  if(!video.videoWidth)throw new Error("Start the camera first.");
+function drawLoop(){
+  if(!running)return;
+  animationId=requestAnimationFrame(drawLoop);
+
+  if(!video.videoWidth||video.readyState<2)return;
+
+  const w=canvas.width,h=canvas.height;
+  ctx.save();
+  if($("mirror").checked){
+    ctx.translate(w,0);
+    ctx.scale(-1,1);
+  }
+
+  const brightness=$("brightness").value;
+  const contrast=$("contrast").value;
+  ctx.filter=`brightness(${brightness}%) contrast(${contrast}%)`;
+  ctx.drawImage(video,0,0,w,h);
+  ctx.filter="none";
+
+  const now=performance.now();
+  // Keep inference frequent but avoid running it repeatedly on the same video frame.
+  if(faceLandmarker && video.currentTime!==lastVideoTime &&
+     now-lastDetectionTime>=33){
+    lastDetectionTime=now;
+    lastVideoTime=video.currentTime;
+
+    try{
+      const result=faceLandmarker.detectForVideo(video,now);
+      if(result.faceLandmarks && result.faceLandmarks.length){
+        lastLandmarks=smoothFace(result.faceLandmarks[0]);
+        lastGoodFaceTime=now;
+      }else{
+        lastLandmarks=null;
+      }
+    }catch(error){
+      console.warn("Face tracking frame skipped",error);
+    }
+  }
+
+  if(lastLandmarks && now-lastGoodFaceTime<250){
+    drawEffects(lastLandmarks);
+  }else if(now-lastGoodFaceTime>250){
+    lastLandmarks=null;
+  }
+
+  ctx.restore();
+
+  if(!faceLandmarker){
+    sayOccasionally("کیمرا چل رہا ہے، AI ماڈل لوڈ ہو رہا ہے...");
+  }else if(!lastLandmarks){
+    sayOccasionally("چہرہ کیمرے کے سامنے لائیں۔");
+  }else{
+    sayOccasionally("AI Face Tracking فعال ہے۔");
+  }
+}
+
+function makePhoto(){
   const out=document.createElement("canvas");
-  out.width=video.videoWidth;out.height=video.videoHeight;
-  const c=out.getContext("2d");
-  c.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
-  c.translate(out.width,0);c.scale(-1,1);
-  c.drawImage(video,0,0,out.width,out.height);
-  c.setTransform(1,0,0,1,0,0);c.filter="none";
-  c.drawImage(overlay,0,0,out.width,out.height);
-  return out;
+  out.width=canvas.width;
+  out.height=canvas.height;
+  out.getContext("2d").drawImage(canvas,0,0);
+  return out.toDataURL("image/png");
 }
 
-function addGalleryPhoto(url){
-  const item=document.createElement("div");
-  item.className="item";
-  const img=document.createElement("img");
-  img.src=url;img.alt="Captured photo";
-  const link=document.createElement("a");
-  link.href=url;link.download="live-ai-photo.png";
-  link.textContent="Download PNG";
-  item.append(img,link);
-  $("gallery").prepend(item);
-}
-
-async function takePhoto(){
+function savePhoto(){
+  if(!stream || !running){
+    setStatus("پہلے کیمرا شروع کریں۔");
+    return;
+  }
   if(photoBusy)return;
   photoBusy=true;
-  try{
-    const seconds=Number($("timer").value);
-    for(let n=seconds;n>0;n--){
-      say("Photo in "+n+"...");
-      await new Promise(resolve=>setTimeout(resolve,1000));
-      if(!running)throw new Error("Camera stopped.");
-    }
-    const out=outputCanvas();
-    const url=out.toDataURL("image/png");
-    $("photoPreview")?.remove();
-    addGalleryPhoto(url);
-    say("Photo captured. Download it from the gallery.");
-  }catch(e){say(e.message)}
-  finally{photoBusy=false}
+
+  const seconds=Number($("timer").value);
+  if(seconds>0){
+    let left=seconds;
+    setStatus(`تصویر ${left} سیکنڈ میں لی جائے گی...`);
+    const interval=setInterval(()=>{
+      left--;
+      if(left>0){
+        setStatus(`تصویر ${left} سیکنڈ میں لی جائے گی...`);
+      }else{
+        clearInterval(interval);
+        finishPhoto();
+      }
+    },1000);
+  }else{
+    finishPhoto();
+  }
 }
 
-$("start").addEventListener("click",startCamera);
-$("switch").addEventListener("click",async()=>{
-  facing=facing==="user"?"environment":"user";
+function finishPhoto(){
+  try{
+    const url=makePhoto();
+    lastPhotoUrl=url;
+    const gallery=$("gallery");
+    const wrap=document.createElement("div");
+    const img=document.createElement("img");
+    img.src=url;
+    img.alt="Camera photo";
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`live-ai-photo-${Date.now()}.png`;
+    a.textContent="⬇ Download PNG";
+    wrap.append(img,a);
+    gallery.prepend(wrap);
+    setStatus("تصویر تیار ہے۔ Gallery سے Download کر سکتے ہیں۔");
+  }catch(error){
+    setStatus("تصویر محفوظ نہیں ہو سکی: "+error.message);
+  }finally{
+    photoBusy=false;
+  }
+}
+
+function downloadLastPhoto(){
+  if(!lastPhotoUrl){
+    setStatus("پہلے تصویر لیں، پھر اسے ڈاؤن لوڈ کریں۔");
+    return;
+  }
+  const a=document.createElement("a");
+  a.href=lastPhotoUrl;
+  a.download=`live-ai-photo-${Date.now()}.png`;
+  a.click();
+}
+
+function startRecording(){
+  if(!running || !stream){
+    setStatus("ریکارڈنگ سے پہلے کیمرا شروع کریں۔");
+    return;
+  }
+  if(!canvas.captureStream || !window.MediaRecorder){
+    setStatus("اس براؤزر میں ویڈیو ریکارڈنگ سپورٹ نہیں ہے۔");
+    return;
+  }
+  try{
+    recordingCanvas=document.createElement("canvas");
+    recordingCanvas.width=canvas.width;
+    recordingCanvas.height=canvas.height;
+    recordingCtx=recordingCanvas.getContext("2d");
+    recordingChunks=[];
+
+    const paintRecording=()=>{
+      if(!recorder || recorder.state!=="recording")return;
+      recordingCtx.drawImage(canvas,0,0);
+      requestAnimationFrame(paintRecording);
+    };
+
+    recordingStream=recordingCanvas.captureStream(24);
+    const mimeTypes=[
+      "video/webm;codecs=vp8",
+      "video/webm"
+    ];
+    const mimeType=mimeTypes.find(t=>MediaRecorder.isTypeSupported(t));
+    recorder=new MediaRecorder(recordingStream,mimeType?{mimeType}:{});
+
+    recorder.ondataavailable=e=>{
+      if(e.data && e.data.size)recordingChunks.push(e.data);
+    };
+    recorder.onstop=()=>{
+      const blob=new Blob(recordingChunks,{type:recorder.mimeType||"video/webm"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=`live-ai-video-${Date.now()}.webm`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),10000);
+
+      if(recordingStream){
+        recordingStream.getTracks().forEach(t=>t.stop());
+        recordingStream=null;
+      }
+      $("recordBtn").textContent="🔴 Start Recording";
+      setStatus("ویڈیو تیار ہے اور ڈاؤن لوڈ شروع ہو گیا ہے۔");
+    };
+
+    recorder.start(250);
+    $("recordBtn").textContent="⏹ Stop Recording";
+    setStatus("ویڈیو ریکارڈ ہو رہی ہے۔ روکنے کے لیے دوبارہ بٹن دبائیں۔");
+    paintRecording();
+  }catch(error){
+    console.error(error);
+    setStatus("ریکارڈنگ شروع نہیں ہو سکی: "+error.message);
+  }
+}
+
+function stopRecording(){
+  if(recorder && recorder.state==="recording"){
+    recorder.stop();
+    setStatus("ویڈیو تیار کی جا رہی ہے...");
+  }
+}
+
+$("startBtn").addEventListener("click",startCamera);
+$("stopBtn").addEventListener("click",stopCamera);
+
+$("switchBtn").addEventListener("click",async()=>{
+  facingMode=facingMode==="user"?"environment":"user";
+  if(stream){
+    running=false;
+    if(animationId)cancelAnimationFrame(animationId);
+    if(stream)stream.getTracks().forEach(t=>t.stop());
+    stream=null;
+    video.srcObject=null;
+  }
   await startCamera();
 });
 
-$("stop").addEventListener("click",()=>{
-  running=false;cancelAnimationFrame(raf);
-  if(recording&&recorder&&recorder.state!=="inactive")recorder.stop();
-  stopTracks();video.srcObject=null;
-  landmarks=null;smooth=null;
-  ctx.clearRect(0,0,overlay.width,overlay.height);
-  say("Camera stopped.");
+$("resolution").addEventListener("change",async()=>{
+  if(stream){
+    running=false;
+    if(animationId)cancelAnimationFrame(animationId);
+    stream.getTracks().forEach(t=>t.stop());
+    stream=null;
+    video.srcObject=null;
+    await startCamera();
+  }
 });
 
-$("photoBtn").addEventListener("click",takePhoto);
+$("photoBtn").addEventListener("click",savePhoto);
+$("downloadLastBtn").addEventListener("click",downloadLastPhoto);
 
 $("recordBtn").addEventListener("click",()=>{
-  if(recording){if(recorder&&recorder.state!=="inactive")recorder.stop();return}
-  try{
-    if(!video.videoWidth||!stream)throw new Error("Start the camera first.");
-    if(!window.MediaRecorder)throw new Error("Recording not supported in this browser.");
-
-    recordCanvas=document.createElement("canvas");
-    recordCanvas.width=video.videoWidth;recordCanvas.height=video.videoHeight;
-    recordCtx=recordCanvas.getContext("2d");
-    recordStream=recordCanvas.captureStream(20);
-    const mime=MediaRecorder.isTypeSupported("video/webm;codecs=vp8")?"video/webm;codecs=vp8":"video/webm";
-    recorder=new MediaRecorder(recordStream,{mimeType:mime});
-    chunks=[];
-
-    recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
-    recorder.onstop=()=>{
-      recording=false;cancelAnimationFrame(recordRaf);
-      $("recordBtn").textContent="Start Recording";
-      if(recordStream)recordStream.getTracks().forEach(t=>t.stop());
-      recordStream=null;
-      if(chunks.length){
-        const blob=new Blob(chunks,{type:"video/webm"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;a.download="live-ai-video.webm";a.click();
-        setTimeout(()=>URL.revokeObjectURL(url),60000);
-        say("Video saved to Downloads.");
-      }else say("No video data recorded.");
-    };
-
-    function frame(){
-      if(!recording)return;
-      recordCtx.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
-      recordCtx.save();recordCtx.translate(recordCanvas.width,0);recordCtx.scale(-1,1);
-      recordCtx.drawImage(video,0,0,recordCanvas.width,recordCanvas.height);
-      recordCtx.restore();recordCtx.filter="none";
-      recordCtx.drawImage(overlay,0,0,recordCanvas.width,recordCanvas.height);
-      recordRaf=requestAnimationFrame(frame);
-    }
-
-    recording=true;frame();recorder.start();
-    $("recordBtn").textContent="Stop Recording";say("Recording video...");
-  }catch(e){recording=false;say("Recording error: "+e.message)}
+  if(recorder && recorder.state==="recording")stopRecording();
+  else startRecording();
 });
 
-$("stickerFile").addEventListener("change",e=>{
-  const file=e.target.files?.[0];
+document.querySelectorAll("[data-filter]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    currentFilter=button.dataset.filter;
+    setStatus("فلٹر منتخب: "+button.textContent);
+  });
+});
+
+$("meshBtn").addEventListener("click",()=>{
+  showMesh=!showMesh;
+  $("meshBtn").textContent="Face Mesh: "+(showMesh?"ON":"OFF");
+});
+
+$("stickerUpload").addEventListener("change",event=>{
+  const file=event.target.files && event.target.files[0];
   if(!file)return;
+
   if(file.size>5*1024*1024){
-    say("Choose a sticker smaller than 5 MB.");e.target.value="";return;
+    setStatus("فائل 5 MB سے بڑی ہے۔ چھوٹی تصویر منتخب کریں۔");
+    event.target.value="";
+    return;
   }
+
   const url=URL.createObjectURL(file);
   const img=new Image();
   img.onload=()=>{
-    stickerImage=img;
-    $("stickerPreview").src=url;
-    $("stickerPreview").hidden=false;
-    $("effect").value="sticker";
-    say("Custom sticker loaded. Select Custom AR Sticker if needed.");
+    if(customImage && customImage._url)URL.revokeObjectURL(customImage._url);
+    customImage=img;
+    customImage._url=url;
+    currentFilter="custom";
+    setStatus("اسٹیکر لوڈ ہو گیا۔ Custom Sticker فلٹر فعال ہے۔");
   };
-  img.onerror=()=>{URL.revokeObjectURL(url);say("Could not load this image.")};
+  img.onerror=()=>{
+    URL.revokeObjectURL(url);
+    setStatus("یہ تصویر لوڈ نہیں ہو سکی۔ دوسری فائل آزمائیں۔");
+  };
   img.src=url;
 });
 
-$("stickerSize").addEventListener("input",()=>{
-  $("sv").textContent=$("stickerSize").value+"%";
-});
-
-$("brightness").addEventListener("input",()=>{
-  $("bv").textContent=$("brightness").value+"%";
-  video.style.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
-});
-
-$("contrast").addEventListener("input",()=>{
-  $("cv").textContent=$("contrast").value+"%";
-  video.style.filter=`brightness(${$("brightness").value}%) contrast(${$("contrast").value}%)`;
-});
-
-$("resolution").addEventListener("change",()=>{
-  if(stream)startCamera();
-});
-
-$("reset").addEventListener("click",()=>{
-  $("effect").value="none";$("resolution").value="480";$("timer").value="0";
-  $("brightness").value=100;$("contrast").value=100;$("stickerSize").value=100;
-  $("bv").textContent="100%";$("cv").textContent="100%";$("sv").textContent="100%";
-  $("showMesh").checked=false;video.style.filter="none";
-  say(running?"Settings reset. Camera is running.":"Settings reset.");
-});
-
-window.addEventListener("pagehide",()=>{
-  running=false;cancelAnimationFrame(raf);cancelAnimationFrame(recordRaf);stopTracks();
+window.addEventListener("beforeunload",()=>{
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  if(recordingStream)recordingStream.getTracks().forEach(t=>t.stop());
+  if(customImage && customImage._url)URL.revokeObjectURL(customImage._url);
 });
 </script>
 </body>

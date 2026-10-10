@@ -1,74 +1,208 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live AI Camera</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 25px;
-      background: #101827;
-      color: white;
-      font-family: Arial, sans-serif;
-      text-align: center;
-    }
-    h1 { color: #60a5fa; }
-    video {
-      width: 100%;
-      max-width: 640px;
-      background: #000;
-      border-radius: 12px;
-      margin-top: 20px;
-    }
-    button {
-      padding: 12px 22px;
-      margin: 8px;
-      border: 0;
-      border-radius: 8px;
-      background: #2563eb;
-      color: white;
-      font-size: 16px;
-    }
-    #status { color: #fbbf24; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live AI Camera Effects</title>
+<style>
+body {
+  margin: 0;
+  padding: 20px;
+  background: #101827;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+h1 { color: #60a5fa; }
+.camera {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  margin: 15px auto;
+}
+video, canvas {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+}
+video { transform: scaleX(-1); }
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+}
+button {
+  padding: 12px 16px;
+  margin: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+}
+#status { color: #fbbf24; }
+</style>
 </head>
 <body>
-  <h1>Live AI Camera</h1>
-  <p>Camera Test - Version 1</p>
+<h1>Live AI Camera</h1>
+<p>Face Tracking & Live Glasses</p>
 
-  <video id="camera" autoplay playsinline muted></video>
-  <p id="status">Camera is not started.</p>
+<div class="camera">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+</div>
 
-  <button id="start">Turn On Camera</button>
-  <button id="stop">Turn Off Camera</button>
+<button id="start">Start Camera & AI</button>
+<button id="glasses">Glasses: ON</button>
+<button id="stop">Stop Camera</button>
+<p id="status">Press Start Camera & AI.</p>
 
-  <script>
-    const video = document.getElementById("camera");
-    const status = document.getElementById("status");
-    let stream = null;
+<script type="module">
+import {
+  FaceLandmarker,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
-    document.getElementById("start").onclick = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false
-        });
-        video.srcObject = stream;
-        status.textContent = "Camera is running!";
-      } catch (error) {
-        status.textContent = "Camera error: " + error.message;
+const video = document.getElementById("video");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+const status = document.getElementById("status");
+
+let stream = null;
+let landmarker = null;
+let running = false;
+let showGlasses = true;
+let lastTime = -1;
+
+document.getElementById("glasses").onclick = () => {
+  showGlasses = !showGlasses;
+  document.getElementById("glasses").textContent =
+    "Glasses: " + (showGlasses ? "ON" : "OFF");
+};
+
+document.getElementById("start").onclick = async () => {
+  if (running) return;
+  try {
+    status.textContent = "Loading face tracking model...";
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+
+    landmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: 640, height: 480 },
+      audio: false
+    });
+
+    video.srcObject = stream;
+    await video.play();
+    running = true;
+    status.textContent = "AI running. Look at the camera.";
+    requestAnimationFrame(drawFrame);
+  } catch (err) {
+    status.textContent = "Error: " + err.message;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    running = false;
+  }
+};
+
+function drawFrame() {
+  if (!running) return;
+
+  if (video.readyState >= 2 && video.currentTime !== lastTime) {
+    lastTime = video.currentTime;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    try {
+      const result = landmarker.detectForVideo(video, performance.now());
+      const face = result.faceLandmarks?.[0];
+
+      if (face) {
+        status.textContent = "Face detected! Live tracking active.";
+        if (showGlasses) drawGlasses(face, w, h);
+      } else {
+        status.textContent = "Looking for your face...";
       }
-    };
+    } catch (err) {
+      status.textContent = "Tracking error: " + err.message;
+    }
+  }
 
-    document.getElementById("stop").onclick = () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-      video.srcObject = null;
-      status.textContent = "Camera is stopped.";
-    };
-  </script>
+  requestAnimationFrame(drawFrame);
+}
+
+function drawGlasses(p, w, h) {
+  // Eye corner landmarks
+  const left = p[33];
+  const right = p[263];
+  const lx = (1 - left.x) * w;
+  const ly = left.y * h;
+  const rx = (1 - right.x) * w;
+  const ry = right.y * h;
+
+  const dx = rx - lx;
+  const dy = ry - ly;
+  const distance = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+
+  ctx.save();
+  ctx.translate((lx + rx) / 2, (ly + ry) / 2);
+  ctx.rotate(angle);
+  ctx.strokeStyle = "#00e5ff";
+  ctx.lineWidth = Math.max(3, distance * 0.055);
+  ctx.fillStyle = "rgba(0, 229, 255, 0.18)";
+
+  const eyeWidth = distance * 0.40;
+  const eyeHeight = distance * 0.26;
+  const gap = distance * 0.04;
+
+  for (const x of [-eyeWidth - gap / 2, gap / 2]) {
+    ctx.beginPath();
+    ctx.roundRect(
+      x - eyeWidth / 2, -eyeHeight / 2,
+      eyeWidth, eyeHeight, eyeHeight * 0.25
+    );
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(-gap / 2, 0);
+  ctx.lineTo(gap / 2, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+document.getElementById("stop").onclick = () => {
+  running = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  video.srcObject = null;
+  if (landmarker) landmarker.close();
+  landmarker = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  status.textContent = "Camera stopped.";
+};
+</script>
 </body>
 </html>

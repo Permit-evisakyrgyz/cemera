@@ -1,1 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live AI Camera</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 25px;
+      background: #101827;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    h1 { color: #60a5fa; }
+    video {
+      width: 100%;
+      max-width: 640px;
+      background: #000;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+    button {
+      padding: 12px 22px;
+      margin: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+    }
+    #status { color: #fbbf24; }
+  </style>
+</head>
+<body>
+  <h1>Live AI Camera</h1>
+  <p>Camera Test - Version 1</p>
 
+  <video id="camera" autoplay playsinline muted></video>
+  <p id="status">Camera is not started.</p>
+
+  <button id="start">Turn On Camera</button>
+  <button id="stop">Turn Off Camera</button>
+
+  <script>
+    const video = document.getElementById("camera");
+    const status = document.getElementById("status");
+    let stream = null;
+
+    document.getElementById("start").onclick = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+        video.srcObject = stream;
+        status.textContent = "Camera is running!";
+      } catch (error) {
+        status.textContent = "Camera error: " + error.message;
+      }
+    };
+
+    document.getElementById("stop").onclick = () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      status.textContent = "Camera is stopped.";
+    };
+  </script>
+</body>
+</html>
